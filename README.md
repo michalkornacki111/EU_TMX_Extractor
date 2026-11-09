@@ -104,8 +104,3 @@ python3 tmx_extractor.py -i Vol_2009_4 -s EN -t PL -o wynik --format all
 # Pobranie oficjalnego pakietu DGT-TM z serwerów Komisji Europejskiej
 python3 tmx_extractor.py --download Vol_2018_1 -s EN -t PL -o dgt_2018_en_pl.tmx
 ```
-
----
-
-*Translator's note: the menu option "Pobierz oficjalny pakiet DGT-TM z internetu" in the "WHERE TO SAVE THE DOWNLOADED ZIP / TMX FILES?" section is a literal on-screen menu string of the Polish-language program, not free prose; it has therefore been kept in Polish with an English gloss in square brackets.*
-*Translator's note (flagged for the owner): the comment lines inside the bash block were preserved verbatim in Polish because code blocks had to remain byte-identical; they may be translated in a later revision if the owner wishes.*
