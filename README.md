@@ -1,106 +1,102 @@
 # EU Translation Memory Extractor (DGT-TM / Euramis) 🇪🇺
 
 > **Author:** Michał Kornacki (in Antigravity, 2026)  
-> **Licence:** MIT License (2026) – full text in the [`LICENSE`](file:///home/michal/Data/TMX%20Extract/LICENSE) file or by typing `L` in the program  
-> **Base tools:** Built upon the following tools:
-> - `TMXtract.jar` – the official tool of the Directorate-General for Translation (DGT) / the Joint Research Centre (JRC) of the **European Commission** (European Commission, 2013)
-> - `tmxtract` – a project by **Rodrigo Nepomuceno** (2019, MIT, https://github.com/Nepomuceno/tmxtract)
+> **License:** MIT License (2026) – full text in the [`LICENSE`](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/LICENSE) file or enter `L` in the application  
+> **Base Tools:** Developed based on:
+> - `TMXtract.jar` – official tool from the Directorate-General for Translation (DGT) / Joint Research Centre (JRC) of the **European Commission** (2013)
+> - `tmxtract` – open-source project by **Rodrigo Nepomuceno** (2019, MIT, https://github.com/Nepomuceno/tmxtract)
 
-A modern, lightning-fast and beginner-friendly tool written in **Python** that lets you easily extract ready-made translation memories (TMX) and sentence bases in any language pair from the multilingual corpora of European Union legal acts.
-
----
-
-## 📜 MIT Licence
-
-The program is 100% free and open-source under the **MIT License**:
-* You can view the full licence text from within the program itself:
-  * In the wizard: by choosing the **`[L]`** option
-  * From the command line: by typing `python3 tmx_extractor.py --license`
-  * In a text file: [**`LICENSE`**](file:///home/michal/Data/TMX%20Extract/LICENSE)
-  * In the visual documentation: [**`INSTRUKCJA.html`**](file:///home/michal/Data/TMX%20Extract/INSTRUKCJA.html)
+A modern, fast, and beginner-friendly Python tool for extracting ready-to-use Translation Memories (TMX) and bilingual sentence databases in any selected EU language pair from the official European Union legislative corpus.
 
 ---
 
-## 🚀 Quick start (for users with no terminal experience)
+## 📜 MIT License
 
-The program ships with ready-made launcher shortcuts – all you need to do is **double-click the file with your mouse**:
-
-* **Windows**: Double-click [`uruchom_windows.bat`](file:///home/michal/Data/TMX%20Extract/uruchom_windows.bat)
-* **Mac (macOS)**: Double-click [`uruchom_mac.command`](file:///home/michal/Data/TMX%20Extract/uruchom_mac.command)
-* **Linux**: Double-click [`uruchom.sh`](file:///home/michal/Data/TMX%20Extract/uruchom.sh) *(or type `python3 tmx_extractor.py`)*
-
-> 📘 **Full visual documentation:** Open the [**`INSTRUKCJA.html`**](file:///home/michal/Data/TMX%20Extract/INSTRUKCJA.html) file in your browser – it contains a step-by-step guide to installing Python as well as a walkthrough of importing into Trados, memoQ and Excel.
-
----
-
-## ✨ New features in version 2.1
-
-### 1. 📄 Automatic export report (`*_raport.txt`)
-After every export, the program automatically creates a readable text file summarising the entire operation. It contains:
-- The exact date and time of the export
-- The selected language pair (language names and ISO codes)
-- The source resources (the path, the number of files processed and their size in MB)
-- The number of segments searched in the EU corpus
-- The number of unique sentence pairs extracted
-- The number and percentage of duplicates rejected
-- A list of the generated files, with their size and segment counts
-- 3–4 sample translated segments for quick verification.
-*(This metadata is also saved automatically in the `<header><note>` header of the TMX file.)*
-
-### 2. 🛡️ RAM protection / file splitting for CAT tools
-Importing very large TMX files (>100,000 sentences) can freeze CAT tools (SDL Trados Studio, memoQ, OmegaT) or trigger an `OutOfMemory` error.
-- **Recommendation:** Split every **50,000 segments** (this ensures a stable, fast import even on machines with 4–8 GB of RAM) or **100,000 segments**.
-- **Name sequencing:** If splitting is active, the program automatically gives the files readable sequential names:
-  - `dgt_en_pl_part01.tmx`
-  - `dgt_en_pl_part02.tmx`
-  - `dgt_en_pl_part03.tmx`
-- If the result fits in a single file, the clean base name `dgt_en_pl.tmx` is kept.
+This program is 100% free and open-source under the **MIT License**:
+* View the full license inside the application:
+  * In the interactive wizard: choose option **`[L]`**
+  * From the command line: run `python3 tmx_extractor.py --license`
+  * Text file: [**`LICENSE`**](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/LICENSE)
+  * Visual interactive manual: [**`INSTRUCTIONS.html`**](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/INSTRUCTIONS.html)
 
 ---
 
-## 🌐 Official source of EU resources (data.europa.eu)
+## 🚀 Quick Start (No Terminal Experience Needed)
 
-The current European Union translation memory datasets are officially published at:  
-👉 **[data.europa.eu – DGT Translation Memory Dataset](https://data.europa.eu/data/datasets/dgt-translation-memory?locale=en)**
+Ready-to-use 1-click launchers are included. Simply **double-click the file for your operating system**:
 
-On that page, in the **Distributions** section, every annual edition (from **2004** to the latest one, **2025**) provides a direct **Download URL** link to the ZIP package (e.g. `Vol_2025.new_1.zip`).
+* **Windows**: Double-click [`run_windows.bat`](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/run_windows.bat) (or `uruchom_windows.bat`)
+* **Mac (macOS)**: Double-click [`run_mac.command`](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/run_mac.command) (or `uruchom_mac.command`)
+* **Linux**: Double-click [`run_linux.sh`](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/run_linux.sh) (or `uruchom.sh`)
 
----
-
-## 📍 WHERE TO SAVE THE DOWNLOADED ZIP / TMX FILES? (VERY IMPORTANT)
-
-1. **Save the ZIP file directly in the program folder:**  
-   Save or move the downloaded `.zip` file (e.g. `Vol_2025.new_1.zip`) directly into the program folder:  
-   📂 `EU TMX Extractor` *(the folder where `tmx_extractor.py`, `uruchom_windows.bat` and `uruchom_mac.command` are located)*.  
-   When the program starts, it will detect the file automatically and offer it as the first item in its menu.
-
-2. **⛔ DO NOT UNZIP THE ZIP FILES UNDER ANY CIRCUMSTANCES!**  
-   The program processes the compressed ZIP archives directly in working memory, without unpacking them to disk. Unpacking would take up a dozen or more gigabytes and is completely unnecessary.
-
-3. **What if the file ended up in your Downloads folder?**  
-   - You can simply drag it into the program folder `EU TMX Extractor`.
-   - Even if you do not, the program **also scans your system's Downloads folder on its own** and will list any DGT archives it finds for you to choose from!
-
-4. **Downloading directly from within the program:**  
-   If you select the option *"Pobierz oficjalny pakiet DGT-TM z internetu" [Download the official DGT-TM package from the internet]* in the assistant menu, the program will download the file itself and save it in the right folder.
-
-5. **Where do the generated memory files (.tmx, .tsv, reports) end up?**  
-   All output files (`dgt_en_pl_part01.tmx`, the `.tsv` sheets and the `*_raport.txt` report) are saved **in the same program folder** (`EU TMX Extractor`).
+> 📘 **Visual User Guide:** Open [**`INSTRUCTIONS.html`**](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/INSTRUCTIONS.html) in your browser for a visual step-by-step installation guide and CAT import instructions for SDL Trados Studio, memoQ, and OmegaT.
 
 ---
 
-## ⚡ Command-line usage examples (CLI for advanced users)
+## ✨ Features in Version 2.4
+
+### 1. 🌐 Download the ENTIRE Official DGT-TM Repository (File by File)
+Instead of downloading individual volumes manually:
+- In the download menu, select option:  
+  👉 **`[W] DOWNLOAD ENTIRE REPOSITORY AT ONCE (all 87 ZIP files, 2004–2025, file by file) [RECOMMENDED]`**
+- You can also download all parts of a specific year (e.g., all 5 parts of year 2025).
+
+### 2. 📊 Disk Space Calculation & Pre-flight Summary
+Before any download begins, the program displays an exact storage summary:
+- Total volumes in the repository (87 ZIP files)
+- Files already downloaded locally (detected, verified for ZIP integrity, and skipped)
+- Exact number of new files to download
+- Estimated download size (~**7.6 GB** for the entire 2004–2025 repository)
+- Available free disk space on your drive
+- Safety status: `[OK] Sufficient free space available` or critical warning if disk is full.
+
+### 3. 🎯 Post-Download Action Choice: Immediate Extraction or Exit
+After downloads finish, the application asks:
+- **`[1] Proceed directly to TMX extraction (Batch mode across all files) [Recommended]`** – immediately configures your language pair (e.g. English ➔ Polish) and extracts all downloaded archives.
+- **`[2] Finish and exit here`** – cleanly saves all ZIP archives in your folder for future use.
+
+### 4. 🗂️ Sequential Batch Extraction from All ZIPs in a Folder
+If you have multiple ZIP files in your directory:
+- Select option **`[W]`** in Step 1 of the wizard or run with `--batch`.
+- The program processes all archives one by one, creating individual `.tmx` files and reports, followed by a master summary report (`batch_summary_report_*.txt`).
+- Corrupted archives are safely skipped without halting the rest of the batch.
+
+### 5. 🛡️ CAT Tool RAM Protection & File Chunking
+Huge translation memories (>100,000 segments) can freeze or crash SDL Trados Studio and memoQ.
+- The wizard allows splitting output into manageable chunks (default: **50,000 segments per file**).
+- Files are neatly numbered: `*_part01.tmx`, `*_part02.tmx`, etc.
+- Each chunk is a completely standalone, valid TMX 1.4 XML document.
+
+### 6. 🔄 Smooth Auto-Scrolling Terminal Interface
+- The interactive wizard clears the console at each step, displaying a prominent breadcrumb banner of your active choices at line 0.
+- Before each prompt, the console viewport is scrolled down to ensure the prompt is never hidden below the fold in Windows CMD/conhost or long terminal buffers.
+
+---
+
+## 🛠️ Command-Line Interface (CLI)
 
 ```bash
-# Podstawowa ekstrakcja angielski ➔ polski z podziałem co 50 000 segmentów (dla CAT)
-python3 tmx_extractor.py -i Vol_2009_4 -s EN -t PL -o dgt_en_pl.tmx --split 50000
+# Interactive wizard mode
+python3 tmx_extractor.py
 
-# Ekstrakcja bezpośrednio z archiwum ZIP (bez rozpakowywania na dysk!)
-python3 tmx_extractor.py -i Vol_2018_1.zip -s DE -t PL -o niemiecki_polski.tmx
+# Single archive extraction with 50,000 segment chunking
+python3 tmx_extractor.py -i Vol_2009_4.zip -s EN -t PL -o memory_en_pl.tmx --split 50000
 
-# Zapis do Excela (TSV), TMX oraz JSONL jednocześnie
-python3 tmx_extractor.py -i Vol_2009_4 -s EN -t PL -o wynik --format all
+# Batch extraction across all ZIP files in a folder
+python3 tmx_extractor.py -i ./zips --batch -s EN -t PL --output-dir ./results
 
-# Pobranie oficjalnego pakietu DGT-TM z serwerów Komisji Europejskiej
-python3 tmx_extractor.py --download Vol_2018_1 -s EN -t PL -o dgt_2018_en_pl.tmx
+# Download entire DGT-TM repository from CLI
+python3 tmx_extractor.py --download-repo --dest-dir ./dgt_zips
+
+# View MIT license
+python3 tmx_extractor.py --license
 ```
+
+---
+
+## 📥 Importing into CAT Tools
+
+* **SDL Trados Studio**: Open or create a Translation Memory (`.sdltm`) ➔ Click **Import** ➔ Select the generated `.tmx` files ➔ Finish.
+* **memoQ**: Open **Resource Console** ➔ **Translation Memories** ➔ Create/select TM ➔ Click **Import from TMX/CSV** ➔ Select file ➔ OK.
+* **OmegaT**: Place the generated `.tmx` files directly into your project's `/tm` folder.
+* **Microsoft Excel**: Choose **TSV** format in Step 4 and open directly in Excel for tabular analysis.
