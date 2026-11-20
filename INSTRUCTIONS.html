@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Guide – EU Translation Memory Extractor (DGT-TM)</title>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --primary-light: #3b82f6;
+      --primary-dark: #1e3a8a;
+      --secondary: #0d9488;
+      --accent: #f59e0b;
+      --danger: #ef4444;
+      --danger-bg: #fef2f2;
+      --danger-border: #f87171;
+      --success: #10b981;
+      --success-bg: #ecfdf5;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.65;
+      color: var(--text);
+      background-color: var(--bg);
+      padding: 0 16px 80px 16px;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      background: linear-gradient(135deg, #0f2b5c 0%, #1e40af 50%, #2563eb 100%);
+      color: white;
+      padding: 44px 28px;
+      border-radius: 0 0 var(--radius) var(--radius);
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::after {
+      content: "🇪🇺";
+      position: absolute;
+      right: 24px;
+      top: 20px;
+      font-size: 84px;
+      opacity: 0.25;
+      user-select: none;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(4px);
+      color: #fef08a;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      margin-bottom: 12px;
+      line-height: 1.25;
+    }
+
+    header p {
+      font-size: 1.15rem;
+      color: #e2e8f0;
+      max-width: 720px;
+    }
+
+    /* Sticky Navigation Stepper Bar */
+    .stepper-nav {
+      position: sticky;
+      top: 12px;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 14px;
+      margin-bottom: 30px;
+      box-shadow: var(--shadow);
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .stepper-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stepper-nav a:hover {
+      background: #eff6ff;
+      color: var(--primary);
+    }
+
+    .stepper-nav a.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      margin-bottom: 28px;
+      box-shadow: var(--shadow);
+      scroll-margin-top: 80px;
+    }
+
+    h2 {
+      color: var(--primary-dark);
+      font-size: 1.55rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #eff6ff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h3 {
+      color: var(--primary);
+      font-size: 1.25rem;
+      margin: 22px 0 10px 0;
+    }
+
+    p {
+      margin-bottom: 14px;
+    }
+
+    ul, ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    /* Alerts and Callouts */
+    .alert {
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border-left: 4px solid;
+    }
+
+    .alert-warning {
+      background-color: #fffbeb;
+      border-color: var(--accent);
+      color: #92400e;
+    }
+
+    .alert-danger {
+      background-color: var(--danger-bg);
+      border-color: var(--danger);
+      color: #991b1b;
+    }
+
+    .alert-success {
+      background-color: var(--success-bg);
+      border-color: var(--success);
+      color: #065f46;
+    }
+
+    .alert-info {
+      background-color: #eff6ff;
+      border-color: var(--primary-light);
+      color: #1e40af;
+    }
+
+    /* Grid for Launcher Buttons */
+    .platform-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+
+    .platform-card {
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      background: #fafafa;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+
+    .platform-card:hover {
+      border-color: var(--primary-light);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .platform-card h4 {
+      font-size: 1.15rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .platform-card code {
+      display: block;
+      background: #0f172a;
+      color: #38bdf8;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin: 10px 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    /* Step Boxes */
+    .step-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--primary-light);
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin-bottom: 16px;
+    }
+
+    .step-box h4 {
+      color: var(--primary-dark);
+      margin-bottom: 6px;
+      font-size: 1.1rem;
+    }
+
+    /* Code & Terminal Snippets */
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      color: #0f172a;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      margin: 16px 0;
+    }
+
+    /* Section Stepper Navigation Buttons */
+    .section-nav-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+
+    .nav-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .nav-btn-prev {
+      background: #f1f5f9;
+      color: var(--text);
+    }
+
+    .nav-btn-prev:hover {
+      background: #e2e8f0;
+    }
+
+    .nav-btn-next {
+      background: var(--primary);
+      color: white;
+    }
+
+    .nav-btn-next:hover {
+      background: var(--primary-dark);
+    }
+
+    /* Floating Back to Top Button */
+    .back-to-top {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-lg);
+      cursor: pointer;
+      opacity: 0.85;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 99;
+      font-size: 20px;
+    }
+
+    .back-to-top:hover {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- HEADER -->
+    <header>
+      <div class="badge">European Union Corpus • TMX 1.4 • Python 3</div>
+      <h1>EU Translation Memory Extractor (DGT-TM)</h1>
+      <p>
+        Official utility for extracting clean, deduplicated bilingual translation memories (TMX) 
+        and sentence datasets from European Union legislation for SDL Trados Studio, memoQ, OmegaT, and Excel.
+      </p>
+    </header>
+
+    <!-- STICKY STEPPER NAVIGATION BAR -->
+    <nav class="stepper-nav" id="stepperNav">
+      <a href="#about" onclick="smoothScrollTo('about')">ℹ️ Overview</a>
+      <a href="#quickstart" onclick="smoothScrollTo('quickstart')">⚡ Quick Start</a>
+      <a href="#install" onclick="smoothScrollTo('install')">📥 Python Setup</a>
+      <a href="#wizard" onclick="smoothScrollTo('wizard')">🧙 5-Step Wizard</a>
+      <a href="#batch" onclick="smoothScrollTo('batch')">🗂️ Batch Processing</a>
+      <a href="#download" onclick="smoothScrollTo('download')">🌐 EU Datasets</a>
+      <a href="#cat" onclick="smoothScrollTo('cat')">💼 CAT Import</a>
+      <a href="#faq" onclick="smoothScrollTo('faq')">❓ FAQ</a>
+    </nav>
+
+    <!-- SECTION 1: ABOUT & MIT LICENSE -->
+    <section class="card" id="about">
+      <h2>ℹ️ Project Information, Author & MIT License</h2>
+      <p>
+        <strong>EU TMX Extractor</strong> is a high-performance Python application developed for translators, 
+        terminologists, linguists, and translation students to enable quick, transparent extraction 
+        of translation memories from EU legislation without writing any terminal commands.
+      </p>
+
+      <div class="alert alert-info">
+        <strong>Attribution & Authorship:</strong><br>
+        • Developed by <strong>Michał Kornacki</strong> (in Antigravity, 2026)<br>
+        • Released under the terms of the open-source <strong>MIT License</strong> (2026)<br>
+        • Built upon and inspired by:
+        <ul style="margin: 6px 0 0 18px;">
+          <li><code>TMXtract.jar</code> – European Commission Directorate-General for Translation (DGT) / Joint Research Centre (JRC) (2013)</li>
+          <li><code>tmxtract</code> – Rodrigo Nepomuceno (2019, MIT License, <a href="https://github.com/Nepomuceno/tmxtract" target="_blank">github.com/Nepomuceno/tmxtract</a>)</li>
+        </ul>
+      </div>
+
+      <div class="step-box">
+        <h4>📜 MIT License Terms</h4>
+        <p style="font-size: 0.92rem; color: #475569; margin: 0;">
+          Permission is hereby granted, free of charge, to any person obtaining a copy of this software 
+          and associated documentation files, to deal in the Software without restriction, including without 
+          limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
+          copies of the Software. (Full text available in <code>LICENSE</code> or by typing <code>L</code> in the program).
+        </p>
+      </div>
+
+      <div class="section-nav-footer">
+        <span></span>
+        <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('quickstart')">Next: 1-Click Launchers ➔</button>
+      </div>
+    </section>
+
+    <!-- SECTION 2: QUICK START LAUNCHERS -->
+    <section class="card" id="quickstart">
+      <h2>⚡ Quick Start: 1-Click Launchers (No Terminal Needed)</h2>
+      <p>
+        The software includes ready-to-run launchers for each operating system. 
+        You do not need to open a terminal or type any commands:
+      </p>
+
+      <div class="platform-grid">
+        <div class="platform-card">
+          <h4>🪟 Windows (10 / 11)</h4>
+          <p>Double-click the batch file in the program folder:</p>
+          <code>run_windows.bat</code>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Also compatible with <code>uruchom_windows.bat</code>. Automatically enables UTF-8 and ANSI colors in Command Prompt.
+          </p>
+        </div>
+
+        <div class="platform-card">
+          <h4>🍎 macOS (Apple Silicon / Intel)</h4>
+          <p>Double-click the command file in the program folder:</p>
+          <code>run_mac.command</code>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">
+            If macOS shows an unidentified developer notice: right-click the file and choose <strong>Open</strong>.
+          </p>
+        </div>
+
+        <div class="platform-card">
+          <h4>🐧 Linux (Ubuntu, Debian, Fedora)</h4>
+          <p>Double-click or run the shell script:</p>
+          <code>./run_linux.sh</code>
+          <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Alternatively, run <code>python3 tmx_extractor.py</code> from the terminal.
+          </p>
+        </div>
+      </div>
+
+      <div class="alert alert-warning">
+        <strong>⚠️ Compulsory First Step:</strong><br>
+        Always <strong>extract (unzip)</strong> the entire <code>EU_TMX_Extractor.zip</code> archive to a real folder on your drive 
+        (e.g., Desktop or Documents) before double-clicking the launcher. Do not run directly from inside the compressed ZIP window!
+      </div>
+
+      <div class="section-nav-footer">
+        <button class="nav-btn nav-btn-prev" onclick="smoothScrollTo('about')">⬅ Overview</button>
+        <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('install')">Next: Python Setup ➔</button>
+      </div>
+    </section>
+
+    <!-- SECTION 3: PYTHON INSTALLATION -->
+    <section class="card" id="install">
+      <h2>📥 1. One-Time Python Installation (Done Once)</h2>
+      <p>
+        EU TMX Extractor runs on the free, official Python runtime. 
+        If Python is not already installed on your computer, follow the instructions below:
+      </p>
+
+      <h3>For Windows Users:</h3>
+      <ol>
+        <li>Go to the official website: <a href="https://www.python.org/downloads/" target="_blank"><strong>https://www.python.org/downloads/</strong></a></li>
+        <li>Click the large yellow button: <strong>Download Python 3.12 (or newer)</strong>.</li>
+        <li>Launch the downloaded installer file (<code>python-3.12.x-amd64.exe</code>).</li>
+        <li>
+          <div class="alert alert-danger" style="margin: 8px 0;">
+            <strong>🚨 THE MOST CRITICAL STEP ON WINDOWS:</strong><br>
+            On the very first screen of the installer, look at the bottom and check the checkbox:<br>
+            <span style="font-size: 1.15rem; font-weight: 800; color: #b91c1c;">☑ Add python.exe to PATH</span><br>
+            <em>(If this checkbox is omitted, Windows will not recognize the python command!)</em>
+          </div>
+        </li>
+        <li>Click <strong>Install Now</strong> and wait for completion. You are done!</li>
+      </ol>
+
+      <h3>For Mac (macOS) Users:</h3>
+      <ol>
+        <li>Go to: <a href="https://www.python.org/downloads/macos/" target="_blank"><strong>https://www.python.org/downloads/macos/</strong></a></li>
+        <li>Download the <strong>macOS 64-bit universal2 installer (.pkg)</strong>.</li>
+        <li>Open the installer package and follow the standard on-screen wizard.</li>
+      </ol>
+
+      <div class="section-nav-footer">
+        <button class="nav-btn nav-btn-prev" onclick="smoothScrollTo('quickstart')">⬅ 1-Click Launchers</button>
+        <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('wizard')">Next: 5-Step Wizard ➔</button>
+      </div>
+    </section>
+
+    <!-- SECTION 4: 5-STEP WIZARD -->
+    <section class="card" id="wizard">
+      <h2>🧙 2. The 5-Step Interactive Wizard</h2>
+      <p>
+        When you double-click the launcher, the program opens an interactive step-by-step assistant. 
+        Each step clears the console window and displays a top breadcrumb banner, ensuring that the active prompt 
+        is always clearly visible at line 0 without requiring manual scrolling.
+      </p>
+
+      <div class="step-box">
+        <h4>Step 1 of 5: Source Data Location</h4>
+        <p>The program automatically scans your folder and downloads directory for ZIP archives and TMX files.</p>
+        <ul>
+          <li><strong>Option [W]:</strong> Process ALL detected ZIP archives one by one (Batch mode).</li>
+          <li><strong>Option [1..N]:</strong> Select a specific local ZIP archive found in the folder.</li>
+          <li><strong>Custom path:</strong> Enter a custom file or folder path.</li>
+          <li><strong>Download:</strong> Connect to official data.europa.eu repositories.</li>
+        </ul>
+      </div>
+
+      <div class="step-box">
+        <h4>Step 2 of 5: Target Language Pair</h4>
+        <p>
+          Select from the most popular EU language combinations (e.g., <code>[1] English -> Polish (EN -> PL)</code>, 
+          <code>German -> Polish</code>, <code>French -> English</code>) or type any custom language pair. 
+          The engine accepts both 2-letter ISO codes (<code>EN</code>, <code>PL</code>, <code>DE</code>) 
+          and full English/Polish language names (<code>polish</code>, <code>polski</code>, <code>french</code>).
+        </p>
+      </div>
+
+      <div class="step-box">
+        <h4>Step 3 of 5: CAT RAM Protection & Segment Splitting</h4>
+        <p>
+          Very large TMX files (>100,000 translation units) can overwhelm RAM and freeze SDL Trados Studio or memoQ. 
+          The extractor provides built-in chunking:
+        </p>
+        <ul>
+          <li><strong>[1] Split every 50,000 segments:</strong> Recommended for optimal CAT stability. Output is sequenced into <code>_part01.tmx</code>, <code>_part02.tmx</code>, etc.</li>
+          <li><strong>[2] Split every 100,000 segments:</strong> For high-end computers.</li>
+          <li><strong>[3] Custom segment limit:</strong> Enter any custom segment threshold.</li>
+          <li><strong>[4] No splitting:</strong> Generate a single large output file.</li>
+        </ul>
+      </div>
+
+      <div class="step-box">
+        <h4>Step 4 of 5: Output Format and File Naming</h4>
+        <ul>
+          <li><strong>TMX (.tmx):</strong> Industry-standard Translation Memory exchange format (100% compliant with TMX 1.4).</li>
+          <li><strong>Excel / TSV (.tsv):</strong> Tab-separated bilingual spreadsheet ready to open in Microsoft Excel.</li>
+          <li><strong>TMX + Excel/TSV:</strong> Both formats generated simultaneously in a single pass.</li>
+          <li><strong>JSONL (.jsonl):</strong> Clean structured format for AI model fine-tuning.</li>
+        </ul>
+      </div>
+
+      <div class="step-box">
+        <h4>Step 5 of 5: Quality & Deduplication Options</h4>
+        <ul>
+          <li><strong>Deduplication [Y/n]:</strong> Removes redundant repetitions, keeping only unique sentence pairs.</li>
+          <li><strong>Identical Segment Filter [Y/n]:</strong> Filters out non-translatable units where source and target are identical (e.g. pure digits, article numbering).</li>
+          <li><strong>Max pairs limit:</strong> Leave blank for no limit, or specify a test limit (e.g. 1000).</li>
+        </ul>
+      </div>
+
+      <div class="section-nav-footer">
+        <button class="nav-btn nav-btn-prev" onclick="smoothScrollTo('install')">⬅ Python Setup</button>
+        <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('batch')">Next: Batch Processing ➔</button>
+      </div>
+    </section>
+
+    <!-- SECTION 5: BATCH PROCESSING -->
+    <section class="card" id="batch">
+      <h2>🗂️ 3. Batch Extraction: Process All ZIPs One by One</h2>
+      <p>
+        If your project requires processing multiple volumes (for instance, all 5 volumes of year 2025 or multiple historical years), 
+        the batch processing engine handles the entire list automatically in sequence:
+      </p>
+
+      <div class="step-box">
+        <h4>How Batch Mode Operates:</h4>
+        <ol>
+          <li>Detects all ZIP archives in the directory (e.g., <code>Vol_2024_1.zip</code>, <code>Vol_2024_2.zip</code>, <code>Vol_2025_1.zip</code>).</li>
+          <li>Processes each archive independently, creating dedicated output files (e.g., <code>Vol_2024_1_en_pl.tmx</code>) and individual reports.</li>
+          <li><strong>Fault-tolerant:</strong> If one archive is corrupted or incomplete, the program reports a warning and continues processing the remaining archives without crashing.</li>
+          <li>Generates a comprehensive <strong>Master Batch Report</strong> (<code>batch_summary_report_en_pl.txt</code>) summarizing total sentence pairs, elapsed time, and per-archive statistics.</li>
+        </ol>
+      </div>
+
+      <div class="section-nav-footer">
+        <button class="nav-btn nav-btn-prev" onclick="smoothScrollTo('wizard')">⬅ 5-Step Wizard</button>
+        <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('download')">Next: Downloading EU Datasets ➔</button>
+      </div>
+    </section>
+
+    <!-- SECTION 6: EU DATASETS & DOWNLOADS -->
+    <section class="card" id="download">
+      <h2>🌐 4. Official EU Datasets & Repository Download</h2>
+      <p>
+        The European Commission publishes bilingual legal translations under the <strong>DGT-TM open dataset</strong> 
+        at <a href="https://data.europa.eu/data/datasets/dgt-translation-memory?locale=en" target="_blank">data.europa.eu</a>.
+      </p>
+
+      <div class="alert alert-success">
+        <strong>📂 WHERE SHOULD YOU SAVE DOWNLOADED ZIP FILES?</strong><br>
+        Save downloaded <code>.zip</code> files <strong>directly inside the folder of this program</strong> 
+        (the folder containing <code>run_windows.bat</code> and <code>tmx_extractor.py</code>).<br>
+        The program automatically scans its own folder at startup and displays all detected archives in the Step 1 menu!
+      </div>
+
+      <h3>Downloading the ENTIRE Official Repository (2004–2025)</h3>
+      <p>
+        Version 2.4 allows you to download all 87 official volumes directly from within the program:
+      </p>
+      <ul>
+        <li>Select option <strong><code>[W] DOWNLOAD ENTIRE REPOSITORY AT ONCE</code></strong> in the download menu.</li>
+        <li><strong>Pre-flight Storage Summary:</strong> The program calculates local disk usage, estimates total transfer size (~<strong>7.6 GB</strong>), and verifies that you have sufficient free space before downloading.</li>
+        <li><strong>Resume & Skip:</strong> Any files already downloaded locally are verified for ZIP integrity and skipped.</li>
+        <li><strong>Post-Download Prompt:</strong> When the transfer finishes, the program asks whether you wish to proceed immediately to batch TMX extraction or exit.</li>
+      </ul>
+
+      <div class="section-nav-footer">
+        <button class="nav-btn nav-btn-prev" onclick="smoothScrollTo('batch')">⬅ Batch Processing</button>
+        <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('cat')">Next: CAT Tool Import ➔</button>
+      </div>
+    </section>
+
+    <!-- SECTION 7: CAT TOOLS IMPORT -->
+    <section class="card" id="cat">
+      <h2>💼 5. Importing Generated Memories into CAT Tools</h2>
+
+      <h3>1. SDL Trados Studio</h3>
+      <ol>
+        <li>Open SDL Trados Studio and go to the <strong>Translation Memories</strong> view.</li>
+        <li>Click <strong>New</strong> ➔ <strong>New Translation Memory</strong> (select your source and target language).</li>
+        <li>Right-click your newly created translation memory and choose <strong>Import</strong>.</li>
+        <li>Click <strong>Add Files...</strong> and select your generated <code>.tmx</code> file (or all chunk files <code>_part01.tmx</code>, <code>_part02.tmx</code>).</li>
+        <li>Click <strong>Finish</strong>. Your official EU translation memory is ready for active translation!</li>
+      </ol>
+
+      <h3>2. memoQ</h3>
+      <ol>
+        <li>Open memoQ and navigate to <strong>Resource Console</strong> (the book icon in the top left).</li>
+        <li>Click <strong>Translation Memories</strong> in the left sidebar.</li>
+        <li>Click <strong>Create new</strong> or select an existing memory with matching language pair.</li>
+        <li>Click <strong>Import from TMX/CSV</strong> in the operations bar.</li>
+        <li>Select the <code>.tmx</code> file and click <strong>Open</strong> ➔ <strong>OK</strong>.</li>
+      </ol>
+
+      <h3>3. OmegaT</h3>
+      <ol>
+        <li>Open your OmegaT project folder.</li>
+        <li>Locate the subfolder named <code>/tm</code>.</li>
+        <li>Copy your generated <code>.tmx</code> file directly into the <code>/tm</code> folder.</li>
+        <li>In OmegaT, press <code>Ctrl+R</code> (or <code>Cmd+R</code> on Mac) to reload project memories.</li>
+      </ol>
+
+      <h3>4. Microsoft Excel / Spreadsheets</h3>
+      <p>
+        If you chose format <strong>[2] TSV</strong> in Step 4:
+        Open Microsoft Excel ➔ <strong>File</strong> ➔ <strong>Open</strong> ➔ Choose <em>All Files (*.*)</em> ➔ 
+        Select your <code>.tsv</code> file. Excel will open it cleanly formatted into 3 columns: 
+        <code>Source</code>, <code>Target</code>, and <code>Document_ID (CELEX)</code>.
+      </p>
+
+      <div class="section-nav-footer">
+        <button class="nav-btn nav-btn-prev" onclick="smoothScrollTo('download')">⬅ EU Datasets</button>
+        <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('faq')">Next: FAQ & Troubleshooting ➔</button>
+      </div>
+    </section>
+
+    <!-- SECTION 8: FAQ & TROUBLESHOOTING -->
+    <section class="card" id="faq">
+      <h2>❓ 6. Frequently Asked Questions (FAQ) & Troubleshooting</h2>
+
+      <div class="step-box">
+        <h4>Q: Windows says "Python was not found" or closes immediately when launching.</h4>
+        <p>
+          <strong>Fix:</strong> Python was installed without the PATH environment variable. 
+          Relaunch the Python installer, choose <strong>Modify</strong>, and ensure the checkbox 
+          <strong>[X] Add python.exe to PATH</strong> is checked.
+        </p>
+      </div>
+
+      <div class="step-box">
+        <h4>Q: Why does the program split output into _part01.tmx, _part02.tmx?</h4>
+        <p>
+          <strong>Reason:</strong> Very large TMX files (>100,000 translation units) can cause out-of-memory errors in CAT tools during indexing. 
+          Chunking into 50,000 segments ensures 100% reliable import. If you want a single file, select option <strong>[4] No splitting</strong> in Step 3.
+        </p>
+      </div>
+
+      <div class="step-box">
+        <h4>Q: Are special characters (diacritics, quotes, XML tags) safely preserved?</h4>
+        <p>
+          <strong>Yes:</strong> The extractor enforces UTF-8 across all streams and standard XML escaping 
+          (<code>&amp;amp;</code>, <code>&amp;lt;</code>, <code>&amp;gt;</code>, <code>&amp;quot;</code>). 
+          Accented characters in all 24 EU languages are fully preserved.
+        </p>
+      </div>
+
+      <div class="section-nav-footer">
+        <button class="nav-btn nav-btn-prev" onclick="smoothScrollTo('cat')">⬅ CAT Import</button>
+        <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('about')">Back to Overview ⬆</button>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      <p>
+        <strong>EU TMX Extractor v2.4</strong> • Developed by <strong>Michał Kornacki</strong> (in Antigravity, 2026)<br>
+        Open Source under the <strong>MIT License</strong>.
+      </p>
+    </footer>
+
+  </div>
+
+  <!-- FLOATING BACK TO TOP BUTTON -->
+  <button class="back-to-top" id="backToTopBtn" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })" title="Scroll to top">
+    ▲
+  </button>
+
+  <!-- INTERACTIVE SCROLL SCRIPT -->
+  <script>
+    function smoothScrollTo(elementId) {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    // Highlight active nav item on scroll
+    window.addEventListener('scroll', () => {
+      const sections = document.querySelectorAll('section.card');
+      const navLinks = document.querySelectorAll('.stepper-nav a');
+      let currentSectionId = '';
+
+      sections.forEach(section => {
+        const top = section.offsetTop - 120;
+        if (window.scrollY >= top) {
+          currentSectionId = section.getAttribute('id');
+        }
+      });
+
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === '#' + currentSectionId) {
+          link.classList.add('active');
+        }
+      });
+
+      // Show/hide floating button
+      const topBtn = document.getElementById('backToTopBtn');
+      if (window.scrollY > 300) {
+        topBtn.style.display = 'flex';
+      } else {
+        topBtn.style.display = 'none';
+      }
+    });
+  </script>
+
+</body>
+</html>
