@@ -78,7 +78,17 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE."""
+SOFTWARE.
+
+--- DATA LICENSE & NON-AFFILIATION DISCLAIMER ---
+EU TMX Extractor is an independent open-source utility and is NOT affiliated
+with, endorsed by, or an official software product of the European Commission
+or the Directorate-General for Translation (DGT).
+DGT-TM datasets downloaded from data.europa.eu / JRC are open public datasets
+published by the European Union (© European Union, DGT) under Commission
+Decision 2011/833/EU and Creative Commons Attribution 4.0 (CC BY 4.0).
+When reusing extracted translation memories, attribute the European Commission
+(DGT) as the data source and indicate any filtering or modifications applied."""
 
 
 def show_license():
@@ -1706,6 +1716,8 @@ def generate_export_report(
         " Generated TMX files are 100% compliant with the TMX 1.4 standard.",
         " You can import them directly into SDL Trados Studio, memoQ, OmegaT,",
         " Wordfast, CafeTran, or spreadsheet software (for TSV files).",
+        " Source data: DGT-TM (© European Union, DGT; Decision 2011/833/EU / CC BY 4.0).",
+        " Disclaimer: Independent open-source tool, not affiliated with the European Commission.",
         "═" * 80
     ])
 
@@ -2854,6 +2866,8 @@ def _run_merged_batch_extraction(
         "=" * 80,
         " Generated TMX files are 100% compliant with the TMX 1.4 standard.",
         " You can import them directly into SDL Trados Studio, memoQ, OmegaT.",
+        " Source data: DGT-TM (© European Union, DGT; Decision 2011/833/EU / CC BY 4.0).",
+        " Disclaimer: Independent open-source tool, not affiliated with the European Commission.",
         "=" * 80,
     ])
     with open(report_path_en, "w", encoding="utf-8") as rf:
@@ -3109,6 +3123,8 @@ def run_interactive_wizard():
     print(f" {UI.c('Base tools:', UI.BOLD)}")
     print(f"   * TMXtract.jar - European Commission (DGT / JRC, 2013)")
     print(f"   * tmxtract - Rodrigo Nepomuceno (github.com/Nepomuceno/tmxtract, 2019, MIT)")
+    print(UI.c("   [DISCLAIMER] Independent open-source tool (not affiliated with the EU/DGT).", UI.DIM))
+    print(UI.c("                DGT-TM data: © European Union, DGT (Decision 2011/833/EU / CC BY 4.0).", UI.DIM))
     print(UI.c(" ------------------------------------------------------------------", UI.DIM))
     print()
     print(UI.c(" Welcome! This program allows you to easily extract ready-to-use", UI.WHITE))
