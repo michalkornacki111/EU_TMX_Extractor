@@ -4,7 +4,9 @@
 """
 EU TMX Extractor (DGT-TM / JRC-Acquis / Euramis) - Version 2.5
 =============================================================
-Author: Michał Kornacki (in Antigravity, 2026)
+Author: Michał Kornacki, PhD, University of Łódź
+ORCID:  https://orcid.org/0000-0002-0694-004X
+Environment: Antigravity (2026)
 License: MIT License
 
 This program was developed based on:
@@ -39,7 +41,8 @@ import xml.etree.ElementTree as ET
 # PROJECT METADATA AND MIT LICENSE
 # ==============================================================================
 
-AUTHOR = "Michał Kornacki"
+AUTHOR = "Michał Kornacki, PhD, University of Łódź"
+ORCID = "https://orcid.org/0000-0002-0694-004X"
 ENVIRONMENT = "Antigravity"
 YEAR = "2026"
 VERSION = "2.5"
@@ -51,9 +54,10 @@ BASE_TOOLS_INFO = (
 
 MIT_LICENSE_TEXT = """MIT License
 
-Copyright (c) 2026 Michał Kornacki (in Antigravity)
+Copyright (c) 2026 Michał Kornacki, PhD, University of Łódź
+ORCID: https://orcid.org/0000-0002-0694-004X
 
-This software is built upon and inspired by:
+Developed in Antigravity (2026). This software is built upon and inspired by:
   - TMXtract.jar (Copyright (c) 2013 European Commission - DGT / JRC)
   - tmxtract (Copyright (c) 2019 Rodrigo Nepomuceno, https://github.com/Nepomuceno/tmxtract)
 
@@ -1102,6 +1106,7 @@ class TMXExtractor:
         self.duplicates_removed = 0
         self.identical_filtered = 0
         self.empty_filtered = 0
+        self.pivot_en_found = 0
         self.seen_hashes: Set[Tuple[str, str]] = set()
 
     def matches_lang(self, tuv_lang: str, target_code: str) -> bool:
@@ -1168,6 +1173,8 @@ class TMXExtractor:
                                 if self.deduplicate:
                                     self.seen_hashes.add(pair_key)
                                 self.total_pairs_matched += 1
+                                if pivot_en_seg:
+                                    self.pivot_en_found += 1
                                 yield TranslationPair(
                                     source=src_seg,
                                     target=trg_seg,
@@ -1198,7 +1205,7 @@ class TMXExtractor:
                     text = raw.decode("latin-1", errors="replace")
 
             tu_re = re.compile(r"<tu\b[^>]*>(.*?)</tu>", re.DOTALL)
-            tuv_re = re.compile(r"<tuv\b[^>]*\blang=[\"\x27]([^\"]+)[\"\x27][^>]*>\s*<seg>(.*?)</seg>", re.DOTALL)
+            tuv_re = re.compile(r"<tuv\b[^>]*\b(?:xml:)?lang=[\"\x27]([^\"]+)[\"\x27][^>]*>\s*<seg>(.*?)</seg>", re.DOTALL)
             doc_re = re.compile(r"<prop\b[^>]*type=[\"\x27]Txt::Doc\. No\.[\"\x27][^>]*>(.*?)</prop>", re.DOTALL)
 
             for match in tu_re.finditer(text):
@@ -1215,11 +1222,14 @@ class TMXExtractor:
 
                 src_seg = None
                 trg_seg = None
+                pivot_en_seg = None
                 for l_key, s_val in tuvs.items():
                     if src_seg is None and self.matches_lang(l_key, self.src_code):
                         src_seg = s_val
                     elif trg_seg is None and self.matches_lang(l_key, self.trg_code):
                         trg_seg = s_val
+                    elif self.capture_pivot_en and pivot_en_seg is None and self.matches_lang(l_key, "EN"):
+                        pivot_en_seg = s_val
 
                 if src_seg and trg_seg:
                     pair_key = (src_seg, trg_seg)
@@ -1229,7 +1239,14 @@ class TMXExtractor:
                         if self.deduplicate:
                             self.seen_hashes.add(pair_key)
                         self.total_pairs_matched += 1
-                        yield TranslationPair(source=src_seg, target=trg_seg, doc_id=doc_id)
+                        if pivot_en_seg:
+                            self.pivot_en_found += 1
+                        yield TranslationPair(
+                            source=src_seg,
+                            target=trg_seg,
+                            doc_id=doc_id,
+                            pivot_en=pivot_en_seg or ""
+                        )
         except Exception:
             pass
 
@@ -1511,6 +1528,7 @@ def generate_export_report(
         f"   • Generation timestamp:          {now_str}",
         f"   • Tool:                          EU TMX Extractor v{VERSION}",
         f"   • Author:                        {AUTHOR} (in {ENVIRONMENT}, {YEAR})",
+        f"   • ORCID:                         {ORCID}",
         f"   • License:                       MIT License (see LICENSE file or run with --license)",
         f"   • Base Tools:                    TMXtract.jar (European Commission - DGT / JRC, 2013)",
         f"                                    and tmxtract (Rodrigo Nepomuceno, 2019, MIT)",
@@ -1544,6 +1562,8 @@ def generate_export_report(
         if cat_counts:
             breakdown = ", ".join(f"{cat}: {cat_counts.get(cat, 0):,}" for cat in DOMAIN_CATEGORIES if cat_counts.get(cat, 0) > 0)
             lines.append(f"   • Domain Category Breakdown:     {breakdown}")
+        if stats.get("domain_lang_warning"):
+            lines.append(f"   • Domain Language Limitation:    {stats['domain_lang_warning']}")
 
     lines.extend([
         "",
@@ -2162,6 +2182,11 @@ def run_extraction(
 
     sample_preview: List[Tuple[str, str, str]] = []
     total_files = len(sources)
+    needs_en_pivot = (
+        domain_active
+        and source_lang.upper() not in ("EN", "PL")
+        and target_lang.upper() not in ("EN", "PL")
+    )
 
     if not quiet:
         split_desc = f", splitting: every {split_size:,} segments" if split_size > 0 else ", single file (no splitting)"
@@ -2171,6 +2196,11 @@ def run_extraction(
             inc_lbl = ",".join(sorted(include_categories)) if include_categories else "all"
             dom_desc = f", domains: {dom_mode} ({inc_lbl})"
         UI.info(f"Starting extraction: {get_lang_display(source_lang)} -> {get_lang_display(target_lang)}{split_desc}{dom_desc}")
+        if needs_en_pivot:
+            UI.info(
+                f"Language note: Domain dictionaries use EN/PL. For {source_lang.upper()} -> {target_lang.upper()}, "
+                "classification relies on embedded English (<tuv lang='EN'>) variants inside multilingual DGT-TM units."
+            )
 
     try:
         for idx, src_item in enumerate(sources, start=1):
@@ -2242,6 +2272,15 @@ def run_extraction(
     elif include_categories is not None:
         domain_mode_label = "filter only"
 
+    domain_lang_warning = ""
+    if needs_en_pivot and (written_pairs + filtered_by_category) > 0 and extractor.pivot_en_found == 0:
+        domain_lang_warning = (
+            f"No English (EN) pivot segments were found in the input TMX for {source_lang.upper()} -> {target_lang.upper()}. "
+            "Domain categorization uses EN/PL dictionaries and therefore cannot classify standalone bilingual TMX files lacking EN or PL."
+        )
+        if not quiet:
+            UI.warning(domain_lang_warning)
+
     stats = {
         "files_processed": total_files,
         "total_tus_seen": extractor.total_tus_seen,
@@ -2258,6 +2297,8 @@ def run_extraction(
         "include_categories": sorted(include_categories) if include_categories else None,
         "category_counts": category_counts if domain_active else {},
         "filtered_by_category": filtered_by_category,
+        "pivot_en_found": extractor.pivot_en_found,
+        "domain_lang_warning": domain_lang_warning,
     }
 
     report_path_en = f"{base_out}_report.txt"
@@ -2309,6 +2350,7 @@ def generate_master_batch_report(
         f"   * Generation timestamp:           {now_str}",
         f"   * Program version:                EU TMX Extractor v{VERSION}",
         f"   * Author:                         {AUTHOR} (in {ENVIRONMENT}, {YEAR})",
+        f"   * ORCID:                          {ORCID}",
         f"   * Language pair:                  {get_lang_display(source_lang)} -> {get_lang_display(target_lang)}",
         f"   * Total ZIP archives in batch:    {len(zip_paths)}",
         f"   * Successfully processed:         {len(results)}",
@@ -2478,14 +2520,25 @@ def run_batch_extraction(
 # 9. USER-FRIENDLY INTERACTIVE WIZARD
 # ==============================================================================
 
-def _prompt_domain_options_wizard() -> Tuple[Optional[Set[str]], bool, str]:
+def _prompt_domain_options_wizard(src_lang: str = "EN", trg_lang: str = "PL") -> Tuple[Optional[Set[str]], bool, str]:
     """Prompts for optional domain filtering/splitting in Step 5 of the wizard."""
     cats_inline = ", ".join(DOMAIN_CATEGORIES)
+    pair_has_en_or_pl = src_lang.upper() in ("EN", "PL") or trg_lang.upper() in ("EN", "PL")
     print()
-    print(UI.c(f" Domain categorization (10 market-aligned categories):", UI.BOLD))
+    print(UI.c(" Domain categorization (10 market-aligned categories):", UI.BOLD))
     print(UI.c(f"   Categories: {cats_inline}", UI.DIM))
     print(UI.c("   [NOTE] Domain filtering is automated (machine-based) and is not 100% accurate.", UI.YELLOW))
     print(UI.c("          If a segment matches two or more categories, it is placed in all matching files.", UI.DIM))
+    print(UI.c("   [LANG] Classification dictionaries are built for English and Polish (EN / PL).", UI.CYAN))
+    print(UI.c("          For other pairs (e.g. FR -> DE), categorization works ONLY on official multilingual", UI.DIM))
+    print(UI.c("          DGT-TM packages containing an English (<tuv lang='EN'>) variant – it will NOT work", UI.DIM))
+    print(UI.c("          on standalone bilingual TMX files lacking EN or PL.", UI.DIM))
+    if not pair_has_en_or_pl:
+        print(UI.c(
+            f"   [!] Active pair ({src_lang.upper()} -> {trg_lang.upper()}) does not include EN or PL: "
+            "ensure your input is a multilingual DGT-TM archive with EN segments!",
+            UI.YELLOW + UI.BOLD
+        ))
     print(f" [{UI.c('1', UI.CYAN)}] No domain splitting – keep all segments together [Default]")
     print(f" [{UI.c('2', UI.CYAN)}] Split output into separate files by domain (_legal, _finance, _trade, _it_telecom, _engineering, _energy_env, _medical, _chemicals, _agri_food, _general)")
     print(f" [{UI.c('3', UI.CYAN)}] Filter only selected domain categories")
@@ -2513,6 +2566,7 @@ def run_interactive_wizard():
     UI.header(f"EU TRANSLATION MEMORY EXTRACTOR (DGT-TM) v{VERSION}")
     print(UI.c(" ------------------------------------------------------------------", UI.DIM))
     print(f" {UI.c('Author:', UI.BOLD)}       {AUTHOR} (in {ENVIRONMENT}, {YEAR})")
+    print(f" {UI.c('ORCID:', UI.BOLD)}        {ORCID}")
     print(f" {UI.c('License:', UI.BOLD)}      MIT License " + UI.c("(enter 'L' to read full license)", UI.DIM))
     print(f" {UI.c('Base tools:', UI.BOLD)}")
     print(f"   * TMXtract.jar - European Commission (DGT / JRC, 2013)")
@@ -2723,7 +2777,7 @@ def run_interactive_wizard():
         filter_ident = UI.prompt_yes_no("Filter out identical segments (e.g. exact same numbers/codes in both languages)?", default=True)
         limit_ans = UI.prompt("Maximum translation pairs per archive [Enter = NO LIMIT]", default="")
         max_count = int(limit_ans) if limit_ans.isdigit() else 0
-        inc_cats, split_by_cat, dom_summary = _prompt_domain_options_wizard()
+        inc_cats, split_by_cat, dom_summary = _prompt_domain_options_wizard(src_lang, trg_lang)
 
         print()
         UI.header("BATCH EXTRACTION JOB SUMMARY")
@@ -2787,7 +2841,7 @@ def run_interactive_wizard():
     filter_ident = UI.prompt_yes_no("Filter out identical segments (e.g. same numbers or codes in both languages)?", default=True)
     limit_ans = UI.prompt("Maximum total sentence pairs [Enter = NO LIMIT]", default="")
     max_count = int(limit_ans) if limit_ans.isdigit() else 0
-    inc_cats, split_by_cat, dom_summary = _prompt_domain_options_wizard()
+    inc_cats, split_by_cat, dom_summary = _prompt_domain_options_wizard(src_lang, trg_lang)
 
     print()
     UI.header("EXTRACTION JOB SUMMARY")
@@ -2896,12 +2950,19 @@ def main():
     parser.add_argument(
         "--categories",
         default="",
-        help="Filter domain categories (comma-separated: legal,finance,trade,it_telecom,engineering,energy_env,medical,chemicals,agri_food,general)"
+        help=(
+            "Filter domain categories (comma-separated: legal,finance,trade,it_telecom,engineering,"
+            "energy_env,medical,chemicals,agri_food,general). Uses EN/PL dictionaries; pairs like FR-DE "
+            "require multilingual DGT-TM input containing an EN <tuv>."
+        )
     )
     parser.add_argument(
         "--split-by-category",
         action="store_true",
-        help="Split output into separate files per domain category (_legal, _finance, _trade, _it_telecom, _engineering, _energy_env, _medical, _chemicals, _agri_food, _general)"
+        help=(
+            "Split output into separate files per domain category (_legal, _finance, _trade, etc.). "
+            "Uses EN/PL dictionaries; pairs like FR-DE require multilingual DGT-TM input containing an EN <tuv>."
+        )
     )
     parser.add_argument("--no-dedup", action="store_true", help="Disable duplicate removal (keep all repeated sentences)")
     parser.add_argument("--no-filter-identical", action="store_true", help="Keep segments identical in source and target")

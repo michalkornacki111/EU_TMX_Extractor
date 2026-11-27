@@ -1,6 +1,6 @@
 # EU Translation Memory Extractor (DGT-TM / Euramis) 🇪🇺
 
-> **Author:** Michał Kornacki (in Antigravity, 2026)  
+> **Author:** Michał Kornacki, PhD, University of Łódź, ORCID: [https://orcid.org/0000-0002-0694-004X](https://orcid.org/0000-0002-0694-004X) *(in Antigravity, 2026)*  
 > **License:** MIT License (2026) – full text in the [`LICENSE`](file:///home/michal/Data/TMX%20Extract/---%20APP%20---/LICENSE) file or enter `L` in the application  
 > **Base Tools:** Developed based on:
 > - `TMXtract.jar` – official tool from the Directorate-General for Translation (DGT) / Joint Research Centre (JRC) of the **European Commission** (2013)
@@ -84,6 +84,7 @@ Huge translation memories (>100,000 segments) can freeze or crash SDL Trados Stu
   - `agri_food` – Agriculture, Food Safety (EFSA), Animal Feed & Fisheries
   - `general` – General, Administrative & Unclassified (fallback)
 - Uses a zero-dependency two-stage multi-label classifier combining tiered collocation rules, TF-IDF/bigram similarity, and dominant-only document-title context priors (Step 5 in the wizard or `--categories` / `--split-by-category` in CLI).
+- **Language Scope (`EN`/`PL` + DGT-TM `EN` Pivot):** Classification dictionaries are built for **English (`EN`) and Polish (`PL`)**. For pairs that include neither `EN` nor `PL` (such as `FR ➔ DE`), categorization works **only on official multilingual DGT-TM archives** (by inspecting the sibling `<tuv lang="EN">` inside each translation unit) and **will not work** on standalone bilingual `.tmx` files lacking `EN` or `PL`.
 - **Note:** Domain filtering is automated (machine-based) and is not 100% accurate. If a segment matches two or more categories, it is placed in all matching files.
 
 ---

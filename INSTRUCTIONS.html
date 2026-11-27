@@ -409,7 +409,7 @@
 
       <div class="alert alert-info">
         <strong>Attribution & Authorship:</strong><br>
-        • Developed by <strong>Michał Kornacki</strong> (in Antigravity, 2026)<br>
+        • Developed by <strong>Michał Kornacki, PhD</strong>, University of Łódź, ORCID: <a href="https://orcid.org/0000-0002-0694-004X" target="_blank">https://orcid.org/0000-0002-0694-004X</a> (in Antigravity, 2026)<br>
         • Released under the terms of the open-source <strong>MIT License</strong> (2026)<br>
         • Built upon and inspired by:
         <ul style="margin: 6px 0 0 18px;">
@@ -593,6 +593,7 @@
               <li><code>agri_food</code> – Agriculture, Food Safety (EFSA), Animal Feed &amp; Fisheries</li>
               <li><code>general</code> – General, Administrative &amp; Unclassified (fallback)</li>
             </ul>
+          <strong>Language Scope:</strong> Classification dictionaries are built for <strong>English (<code>EN</code>) and Polish (<code>PL</code>)</strong>. For language pairs without <code>EN</code> or <code>PL</code> (e.g., <code>FR ➔ DE</code>), categorization works <strong>only on official multilingual DGT-TM archives</strong> containing an English (<code>&lt;tuv lang="EN"&gt;</code>) variant — it will <strong>not</strong> work on standalone bilingual <code>.tmx</code> files lacking <code>EN</code> or <code>PL</code>.<br>
           <em>Note: Domain filtering is automated (machine-based) and is not 100% accurate. If a segment matches two or more categories, it is placed in all matching files.</em></li>
         </ul>
       </div>
@@ -732,6 +733,18 @@
         </p>
       </div>
 
+      <div class="step-box">
+        <h4>Q: Does domain categorization work for language pairs without English or Polish, e.g. FR ➔ DE?</h4>
+        <p>
+          <strong>Only on official multilingual DGT-TM archives:</strong> The built-in domain dictionaries recognize 
+          <strong>English (<code>EN</code>) and Polish (<code>PL</code>)</strong> terminology. When extracting <code>FR ➔ DE</code> 
+          from an official DGT-TM <code>.zip</code> archive, each translation unit also contains an English segment 
+          (<code>&lt;tuv lang="EN-GB"&gt;</code>), which the parser inspects behind the scenes to assign the right category. 
+          However, on a standalone bilingual <code>FR ➔ DE</code> <code>.tmx</code> file that contains no English or Polish variants, 
+          domain categorization is unavailable.
+        </p>
+      </div>
+
       <div class="section-nav-footer">
         <button class="nav-btn nav-btn-prev" onclick="smoothScrollTo('cat')">⬅ CAT Import</button>
         <button class="nav-btn nav-btn-next" onclick="smoothScrollTo('about')">Back to Overview ⬆</button>
@@ -741,7 +754,7 @@
     <!-- FOOTER -->
     <footer>
       <p>
-        <strong>EU TMX Extractor v2.5</strong> • Developed by <strong>Michał Kornacki</strong> (in Antigravity, 2026)<br>
+        <strong>EU TMX Extractor v2.5</strong> • Developed by <strong>Michał Kornacki, PhD</strong>, University of Łódź (<a href="https://orcid.org/0000-0002-0694-004X" target="_blank" style="color: inherit;">ORCID: 0000-0002-0694-004X</a>, in Antigravity, 2026)<br>
         Open Source under the <strong>MIT License</strong>.
       </p>
     </footer>
