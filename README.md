@@ -231,3 +231,7 @@ python3 run_e2e_tests.py
 Built upon and inspired by:
 - **`TMXtract.jar`** – Official tool by the European Commission Directorate-General for Translation (DGT) / Joint Research Centre (JRC), 2013.
 - **`tmxtract`** – Open-source C# tool by Rodrigo Nepomuceno (2019, MIT, [github.com/Nepomuceno/tmxtract](https://github.com/Nepomuceno/tmxtract)).
+
+### Data License & Non-Affiliation Notice
+- **Independent Open-Source Tool:** *EU TMX Extractor* is an independent, clean-room Python utility and is **not** affiliated with, endorsed by, or an official software product of the European Commission or the Directorate-General for Translation (DGT).
+- **DGT-TM Dataset License:** This repository does **not** redistribute DGT-TM data files. The official DGT-TM archives downloaded by users from `data.europa.eu` / JRC are open public datasets published by the European Union (© European Union, Directorate-General for Translation) under **Commission Decision 2011/833/EU** and **Creative Commons Attribution 4.0 International (CC BY 4.0)**. Users reusing extracted translation memories should attribute the European Commission (DGT) as the data source and indicate any filtering or modifications applied.
