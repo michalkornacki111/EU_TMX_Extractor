@@ -71,6 +71,11 @@ Huge translation memories (>100,000 segments) can freeze or crash SDL Trados Stu
 - The interactive wizard clears the console at each step, displaying a prominent breadcrumb banner of your active choices at line 0.
 - Before each prompt, the console viewport is scrolled down to ensure the prompt is never hidden below the fold in Windows CMD/conhost or long terminal buffers.
 
+### 7. 🏷️ Domain Categorization & Splitting (`legal`, `business`, `environment`, `tech`, `medical`, `general`)
+- Filter segments or automatically split extraction into separate domain-specific TMX files (`*_legal.tmx`, `*_business.tmx`, `*_environment.tmx`, `*_tech.tmx`, `*_medical.tmx`, `*_general.tmx`).
+- Uses a zero-dependency multi-label classifier with document-title context boosting (Step 5 in the wizard or `--categories` / `--split-by-category` in CLI).
+- **Note:** Domain filtering is automated (machine-based) and is not 100% accurate. If a segment matches two or more categories, it is placed in all matching files.
+
 ---
 
 ## 🛠️ Command-Line Interface (CLI)
@@ -81,6 +86,12 @@ python3 tmx_extractor.py
 
 # Single archive extraction with 50,000 segment chunking
 python3 tmx_extractor.py -i Vol_2009_4.zip -s EN -t PL -o memory_en_pl.tmx --split 50000
+
+# Split output into separate TMX files by domain category
+python3 tmx_extractor.py -i Vol_2009_4.zip -s EN -t PL -o memory_en_pl.tmx --split-by-category
+
+# Extract only legal and medical segments into separate files
+python3 tmx_extractor.py -i Vol_2009_4.zip -s EN -t PL -o memory_en_pl.tmx --categories legal,medical --split-by-category
 
 # Batch extraction across all ZIP files in a folder
 python3 tmx_extractor.py -i ./zips --batch -s EN -t PL --output-dir ./results

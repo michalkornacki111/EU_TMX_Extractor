@@ -430,10 +430,10 @@ class TestCliSubprocessE2E(unittest.TestCase):
         # KROK 2: '1' (EN -> PL)
         # KROK 3: '4' (bez podziału)
         # KROK 4: '1' (TMX), Enter (domyślny katalog zapisu)
-        # KROK 5: 't' (dedup), 't' (filter identical), Enter (bez limitu)
+        # KROK 5: 't' (dedup), 't' (filter identical), Enter (bez limitu), '1' (no domain split)
         # Potwierdzenie: 't'
         # Zakończenie: Enter
-        wizard_inputs = "W\n1\n4\n1\n\nt\nt\n\nt\n\n"
+        wizard_inputs = "W\n1\n4\n1\n\nt\nt\n\n1\nt\n\n"
 
         cmd = [sys.executable, script_copy]
         res = subprocess.run(cmd, input=wizard_inputs, cwd=sim_dir, capture_output=True, text=True)
@@ -565,6 +565,185 @@ class TestRepositoryBatchDownloadAndDiskSummaryE2E(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(out_tmx_dir, "Vol_Extract_1_en_pl.tmx")))
         self.assertTrue(os.path.isfile(os.path.join(out_tmx_dir, "Vol_Extract_2_en_pl.tmx")))
         self.assertTrue(os.path.isfile(batch_stats["master_report_path"]))
+
+
+class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
+    """Tests multi-label domain classification, filtering, and splitting across 6 categories."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(prefix="e2e_domain_test_")
+        self.sample_pairs = [
+            (
+                "Regulation (EC) No 1234/2025 of the European Parliament pursuant to Article 4 on infringement proceedings.",
+                "Rozporządzenie (WE) nr 1234/2025 Parlamentu Europejskiego zgodnie z artykułem 4 w sprawie naruszenia.",
+                "Verordnung (EG) Nr. 1234/2025."
+            ),
+            (
+                "The undertaking received State aid and a customs tariff exemption affecting market competition and VAT.",
+                "Przedsiębiorstwo otrzymało pomoc państwa i zwolnienie z cła wpływające na konkurencję na rynku i VAT.",
+                "Das Unternehmen erhielt eine staatliche Beihilfe."
+            ),
+            (
+                "Reducing greenhouse gas CO2 emissions and preventing biodiversity loss and hazardous waste pollution.",
+                "Redukcja emisji dwutlenku węgla oraz ochrona bioróżnorodności i zapobieganie zanieczyszczeniu odpadami niebezpiecznymi.",
+                "Verringerung der Treibhausgasemissionen."
+            ),
+            (
+                "Approval of compression-ignition engines, adaptive front-lighting systems, and cybersecurity software encryption.",
+                "Homologacja silników o zapłonie samoczynnym, reflektorów oraz oprogramowania do szyfrowania w cyberbezpieczeństwie.",
+                "Genehmigung von Selbstzündungsmotoren."
+            ),
+            (
+                "Clinical trial pharmacovigilance for medicinal products, vaccines, and veterinary antimicrobial toxicology.",
+                "Badania kliniczne i nadzór nad bezpieczeństwem farmakoterapii produktów leczniczych, szczepionek i weterynarii.",
+                "Klinische Prüfung von Arzneimitteln."
+            ),
+            (
+                "12 May 2025, Brussels.",
+                "12 maja 2025 r., Bruksela.",
+                "12. Mai 2025, Brüssel."
+            ),
+            (
+                "Pursuant to Directive 2024/10, engine exhaust emission limits must prevent air pollution.",
+                "Zgodnie z dyrektywą 2024/10 normy emisji spalin silników muszą zapobiegać zanieczyszczeniu powietrza.",
+                "Gemäß Richtlinie 2024/10."
+            ),
+        ]
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_classifier_multilabel_and_doc_context(self):
+        clf = tmx_extractor.DomainClassifier(use_doc_context=True)
+        # Multi-label sentence: legal + tech + environment
+        cats = clf.classify_multi(
+            self.sample_pairs[6][0],
+            self.sample_pairs[6][1],
+            doc_key="DOC_MULTI"
+        )
+        self.assertIn("legal", cats)
+        self.assertIn("environment", cats)
+        self.assertIn("tech", cats)
+        self.assertNotIn("general", cats)
+
+        # Boilerplate date/city falls back to general even in a typed document
+        gen_cats = clf.classify_multi(
+            self.sample_pairs[5][0],
+            self.sample_pairs[5][1],
+            doc_key="DOC_MULTI"
+        )
+        self.assertEqual(gen_cats, ["general"])
+
+    def test_after_treatment_not_misclassified_as_medical(self):
+        clf = tmx_extractor.DomainClassifier(use_doc_context=True)
+        c1 = clf.classify_multi(
+            "Diesel engines fitted with advanced exhaust after-treatment systems including deNOx catalysts and/or particulate traps, must additionally be tested on the ETC test.",
+            "Silniki Diesla wyposażone w zaawansowane układy oczyszczania spalin, w tym katalizatory de NOx lub filtry cząstek stałych dodatkowo poddaje się badaniu ETC.",
+            doc_key="42006X1227(05)R(01)"
+        )
+        self.assertIn("tech", c1)
+        self.assertNotIn("medical", c1)
+
+        c2 = clf.classify_multi(
+            "For gas engines and engines with after-treatment",
+            "Dla silników gazowych i silników z oczyszczaniem spalin",
+            doc_key="42006X1227(05)R(01)"
+        )
+        self.assertIn("tech", c2)
+        self.assertNotIn("medical", c2)
+
+        c3 = clf.classify_multi(
+            "Pursuant to Directive 2006/54 on the principle of equal treatment of men and women.",
+            "Zgodnie z dyrektywą 2006/54 w sprawie zasady równego traktowania mężczyzn i kobiet.",
+            doc_key="LEGAL_DOC"
+        )
+        self.assertIn("legal", c3)
+        self.assertNotIn("medical", c3)
+
+        # Level A2 statistical classifier sanity check
+        stat = tmx_extractor.OfflineTfidfBayesClassifier()
+        boosts = stat.score_boosts("clinical trial medicinal product pharmacovigilance dosage patients")
+        self.assertGreaterEqual(boosts["medical"], 1)
+
+    def test_split_by_category_creates_valid_tmx_files(self):
+        zip_path = os.path.join(self.test_dir, "domains.zip")
+        create_mock_zip(zip_path, pairs=self.sample_pairs)
+        out_tmx = os.path.join(self.test_dir, "eu_mem.tmx")
+
+        stats = tmx_extractor.run_extraction(
+            input_path=zip_path,
+            source_lang="EN",
+            target_lang="PL",
+            output_path=out_tmx,
+            split_by_category=True,
+            quiet=True
+        )
+
+        self.assertEqual(stats["extracted_pairs"], 7)
+        for cat in ("legal", "business", "environment", "tech", "medical", "general"):
+            cat_file = os.path.join(self.test_dir, f"eu_mem_{cat}.tmx")
+            self.assertTrue(os.path.isfile(cat_file), f"Missing split file for category: {cat}")
+            tree = ET.parse(cat_file)
+            self.assertEqual(tree.getroot().tag, "tmx")
+            tus = tree.getroot().find("body").findall("tu")
+            self.assertGreaterEqual(len(tus), 1)
+
+        # Verify multi-label pair #7 appears in both legal and environment
+        legal_tree = ET.parse(os.path.join(self.test_dir, "eu_mem_legal.tmx"))
+        env_tree = ET.parse(os.path.join(self.test_dir, "eu_mem_environment.tmx"))
+        legal_texts = ["".join(s.itertext()) for s in legal_tree.getroot().iter("seg")]
+        env_texts = ["".join(s.itertext()) for s in env_tree.getroot().iter("seg")]
+        self.assertTrue(any("Directive 2024/10" in t for t in legal_texts))
+        self.assertTrue(any("Directive 2024/10" in t for t in env_texts))
+
+        # Check report includes domain breakdown
+        with open(stats["report_path"], "r", encoding="utf-8") as rf:
+            rep = rf.read()
+            self.assertIn("Domain Category Breakdown", rep)
+
+    def test_filter_categories_and_no_empty_files(self):
+        zip_path = os.path.join(self.test_dir, "filter_only.zip")
+        create_mock_zip(zip_path, pairs=self.sample_pairs)
+        out_tmx = os.path.join(self.test_dir, "filtered.tmx")
+
+        stats = tmx_extractor.run_extraction(
+            input_path=zip_path,
+            source_lang="DE",
+            target_lang="PL",
+            output_path=out_tmx,
+            include_categories={"medical"},
+            split_by_category=True,
+            quiet=True
+        )
+
+        # Pivot EN text inside DE->PL pair still classifies medical segment
+        self.assertGreaterEqual(stats["extracted_pairs"], 1)
+        self.assertTrue(os.path.isfile(os.path.join(self.test_dir, "filtered_medical.tmx")))
+        # Unselected categories must NOT be created
+        self.assertFalse(os.path.isfile(os.path.join(self.test_dir, "filtered_legal.tmx")))
+        self.assertFalse(os.path.isfile(os.path.join(self.test_dir, "filtered_general.tmx")))
+
+    def test_cli_categories_and_split_flags(self):
+        zip_path = os.path.join(self.test_dir, "cli_dom.zip")
+        create_mock_zip(zip_path, pairs=self.sample_pairs)
+        out_tmx = os.path.join(self.test_dir, "cli_out.tmx")
+
+        cmd = [
+            sys.executable,
+            os.path.join(PROJECT_DIR, "tmx_extractor.py"),
+            "-i", zip_path,
+            "-s", "EN",
+            "-t", "PL",
+            "-o", out_tmx,
+            "--categories", "legal,business",
+            "--split-by-category",
+            "-q"
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertTrue(os.path.isfile(os.path.join(self.test_dir, "cli_out_legal.tmx")))
+        self.assertTrue(os.path.isfile(os.path.join(self.test_dir, "cli_out_business.tmx")))
+        self.assertFalse(os.path.isfile(os.path.join(self.test_dir, "cli_out_medical.tmx")))
 
 
 if __name__ == "__main__":

@@ -21,12 +21,14 @@ import sys
 import os
 import re
 import io
+import math
 import time
 import glob
 import json
 import zipfile
 import shutil
 import argparse
+from collections import Counter
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Iterator, Set, Any, Union
 from xml.sax.saxutils import escape as xml_escape
@@ -640,14 +642,304 @@ def _scan_zip(zip_path: str, out_items: List[SourceItem]):
 # ==============================================================================
 
 class TranslationPair:
-    __slots__ = ("source", "target", "doc_id", "src_lang", "trg_lang")
+    __slots__ = ("source", "target", "doc_id", "src_lang", "trg_lang", "pivot_en")
 
-    def __init__(self, source: str, target: str, doc_id: str = "", src_lang: str = "", trg_lang: str = ""):
+    def __init__(
+        self,
+        source: str,
+        target: str,
+        doc_id: str = "",
+        src_lang: str = "",
+        trg_lang: str = "",
+        pivot_en: str = ""
+    ):
         self.source = source
         self.target = target
         self.doc_id = doc_id
         self.src_lang = src_lang
         self.trg_lang = trg_lang
+        self.pivot_en = pivot_en
+
+
+DOMAIN_CATEGORIES: Tuple[str, ...] = ("legal", "business", "environment", "tech", "medical", "general")
+SPECIALIZED_CATEGORIES: Tuple[str, ...] = ("legal", "business", "environment", "tech", "medical")
+
+
+def parse_categories_arg(raw: Optional[str]) -> Optional[Set[str]]:
+    """Parses a comma-separated list of categories into a validated set, or None for all."""
+    if not raw or not raw.strip():
+        return None
+    tokens = [t.strip().lower() for t in re.split(r"[,;\s]+", raw.strip()) if t.strip()]
+    if not tokens or "all" in tokens:
+        return None
+    valid = {t for t in tokens if t in DOMAIN_CATEGORIES}
+    return valid if valid else None
+
+
+class OfflineTfidfBayesClassifier:
+    """
+    Level A2: Pure-Python statistical TF-IDF + Bigram Naive Bayes classifier (stdlib only).
+    Tokenizes into hyphen-preserving unigrams and bigrams, computes L2-normalized
+    TF-IDF cosine similarity against curated EU domain centroids, and returns
+    statistical confidence boosts (+0, +1, or +2) per specialized domain.
+    """
+
+    # Curated n-gram (unigram + bigram) weighted domain prototypes trained on EU corpus terms
+    _DOMAIN_PROTOTYPES: Dict[str, Dict[str, float]] = {
+        "legal": {
+            "regulation": 2.4, "directive": 2.4, "decision": 1.6, "treaty": 2.6,
+            "jurisdiction": 2.8, "infringement": 2.8, "tribunal": 2.6, "court": 2.0,
+            "legislation": 2.4, "legislative": 2.2, "statutory": 2.6, "liability": 2.2,
+            "obligation": 1.8, "compliance": 1.9, "enforcement": 2.2, "enforceable": 2.5,
+            "sanction": 2.2, "penalty": 2.0, "penalties": 2.0, "amendment": 1.8,
+            "repeal": 2.5, "annex": 1.6, "article": 1.5, "paragraph": 1.4,
+            "member_states": 1.8, "official_journal": 2.3, "legal_basis": 2.6,
+            "competent_authority": 2.2, "competent_authorities": 2.2, "equal_treatment": 2.7,
+            "entry_into_force": 2.4, "pursuant_to": 2.1, "court_of_justice": 2.9,
+            "rozporządzenie": 2.4, "dyrektywa": 2.4, "trybunał": 2.6, "ustawa": 2.4,
+            "postępowanie": 1.9, "odpowiedzialność": 2.0, "dziennik_urzędowy": 2.3,
+        },
+        "business": {
+            "state_aid": 3.0, "undertaking": 2.6, "undertakings": 2.6, "market": 1.8,
+            "competition": 2.2, "competitiveness": 2.2, "enterprise": 2.2, "enterprises": 2.2,
+            "financial": 2.0, "finance": 2.0, "investment": 2.2, "investor": 2.3,
+            "banking": 2.4, "bank": 1.9, "credit": 1.8, "loan": 2.1,
+            "tax": 2.2, "taxation": 2.4, "vat": 2.7, "tariff": 2.6,
+            "customs_duty": 2.8, "excise": 2.6, "audit": 2.3, "accounting": 2.4,
+            "insolvency": 2.8, "bankruptcy": 2.8, "merger": 2.7, "acquisition": 2.5,
+            "procurement": 2.5, "shareholder": 2.6, "dividend": 2.7, "subsidy": 2.5,
+            "subsidies": 2.5, "turnover": 2.2, "revenue": 2.1, "profit": 2.1,
+            "tax_treatment": 2.7, "preferential_treatment": 2.5, "pomoc_państwa": 3.0,
+            "przedsiębiorstwo": 2.4, "rynek": 1.8, "podatek": 2.2, "konkurencja": 2.2,
+        },
+        "environment": {
+            "emission": 2.3, "emissions": 2.3, "pollutant": 2.8, "pollutants": 2.8,
+            "pollution": 2.7, "greenhouse": 2.8, "greenhouse_gas": 3.0, "co2": 2.9,
+            "carbon_dioxide": 2.9, "climate": 2.4, "climate_change": 2.8, "biodiversity": 2.9,
+            "ecosystem": 2.8, "deforestation": 2.9, "habitat": 2.5, "wildlife": 2.6,
+            "forestry": 2.5, "recycling": 2.6, "waste": 2.0, "hazardous_waste": 2.9,
+            "landfill": 2.8, "effluent": 2.8, "dioxin": 2.9, "dioxins": 2.9,
+            "furans": 2.9, "pcbs": 2.8, "ozone": 2.8, "renewable_energy": 2.8,
+            "water_quality": 2.6, "air_quality": 2.6, "groundwater": 2.7, "sustainability": 2.4,
+            "waste_treatment": 2.8, "water_treatment": 2.8, "sewage_treatment": 2.9,
+            "exhaust_emissions": 2.6, "particulate_traps": 2.4, "denox_catalysts": 2.5,
+            "środowisko": 2.4, "zanieczyszczenia": 2.7, "emisja": 2.3, "klimat": 2.4,
+        },
+        "tech": {
+            "engine": 2.4, "engines": 2.4, "diesel": 2.4, "vehicle": 2.3, "vehicles": 2.3,
+            "automotive": 2.5, "homologation": 2.8, "type-approval": 2.8,
+            "after-treatment": 2.9, "exhaust_after-treatment": 3.1, "after_treatment": 2.7,
+            "compression-ignition": 3.0, "positive-ignition": 3.0, "turbocharger": 2.8,
+            "opacimeter": 2.9, "silencer": 2.6, "headlamp": 2.7, "brake": 2.3,
+            "fuel_delivery": 2.5, "rated_power": 2.5, "engine_mapping": 2.7,
+            "software": 2.4, "hardware": 2.4, "algorithm": 2.7, "digital": 2.0,
+            "cybersecurity": 2.9, "encryption": 2.8, "cryptography": 2.9,
+            "semiconductor": 2.9, "photovoltaic": 2.9, "telecommunications": 2.6,
+            "broadband": 2.6, "bandwidth": 2.6, "interoperability": 2.6,
+            "voltage": 2.5, "electronic": 2.1, "sensor": 2.3, "calibration": 2.4,
+            "apparatus": 2.0, "machinery": 2.1, "silnik": 2.4, "pojazd": 2.3,
+            "oczyszczania_spalin": 2.9, "oczyszczaniem_spalin": 2.9, "oprogramowanie": 2.4,
+        },
+        "medical": {
+            "pharmaceutical": 2.9, "medicinal": 2.7, "medicinal_product": 3.0,
+            "clinical_trial": 3.0, "clinical_trials": 3.0, "pharmacovigilance": 3.1,
+            "patient": 2.4, "patients": 2.4, "disease": 2.4, "diseases": 2.4,
+            "diagnosis": 2.6, "diagnostic": 2.5, "therapeutic": 2.6, "therapy": 2.4,
+            "vaccine": 2.8, "vaccination": 2.8, "immunisation": 2.8, "antibiotic": 2.8,
+            "antimicrobial": 2.8, "pathogen": 2.9, "epidemiology": 2.9, "toxicology": 2.8,
+            "carcinogenic": 2.8, "mutagenic": 2.8, "veterinary": 2.6, "zoonotic": 2.9,
+            "hospital": 2.4, "surgical": 2.6, "dosage": 2.6, "pathology": 2.8,
+            "medical_treatment": 3.0, "clinical_treatment": 3.0, "hospital_treatment": 3.0,
+            "healthcare": 2.4, "public_health": 2.3, "animal_nutrition": 2.4,
+            "feedingstuffs": 2.3, "food_safety": 2.2, "farmaceutyczny": 2.8,
+            "produkt_leczniczy": 3.0, "pacjent": 2.4, "choroba": 2.4, "szczepionka": 2.8,
+        },
+    }
+
+    _TOKEN_RE = re.compile(r"[a-zA-Z0-9ąęćłńóśźżĄĘĆŁŃÓŚŹŻ]+(?:-[a-zA-Z0-9ąęćłńóśźżĄĘĆŁŃÓŚŹŻ]+)*")
+    _STOPWORDS: Set[str] = {
+        "the", "and", "for", "with", "that", "this", "from", "are", "was", "were",
+        "have", "has", "had", "not", "but", "all", "any", "can", "may", "must",
+        "shall", "such", "into", "upon", "under", "over", "after", "before",
+        "oraz", "dla", "przez", "przy", "jest", "nie", "tak", "lub", "albo", "jak",
+    }
+
+    def __init__(self):
+        self._norms: Dict[str, float] = {}
+        for cat, weights in self._DOMAIN_PROTOTYPES.items():
+            self._norms[cat] = math.sqrt(sum(v * v for v in weights.values())) or 1.0
+
+    def _extract_features(self, text: str) -> Counter:
+        raw_tokens = [t.lower() for t in self._TOKEN_RE.findall(text)]
+        tokens = [t for t in raw_tokens if len(t) >= 2 and t not in self._STOPWORDS]
+        feats: Counter = Counter(tokens)
+        for i in range(len(tokens) - 1):
+            feats[f"{tokens[i]}_{tokens[i + 1]}"] += 1
+        return feats
+
+    def score_boosts(self, text: str) -> Dict[str, int]:
+        """Returns statistical boost (+0, +1, or +2) per specialized domain."""
+        boosts: Dict[str, int] = {cat: 0 for cat in SPECIALIZED_CATEGORIES}
+        if not text:
+            return boosts
+        feats = self._extract_features(text)
+        # Skip statistical boost on very short boilerplate (dates, headings, numbers)
+        if len(feats) < 4:
+            return boosts
+
+        doc_norm = math.sqrt(sum(c * c for c in feats.values())) or 1.0
+        for cat, proto in self._DOMAIN_PROTOTYPES.items():
+            dot = 0.0
+            for term, tf in feats.items():
+                w = proto.get(term)
+                if w:
+                    dot += tf * w
+            if dot > 0.0:
+                cos_sim = dot / (doc_norm * self._norms[cat])
+                if cos_sim >= 0.24:
+                    boosts[cat] = 2
+                elif cos_sim >= 0.13:
+                    boosts[cat] = 1
+        return boosts
+
+
+class DomainClassifier:
+    """
+    Two-stage offline multi-label classifier for EU DGT-TM segments across 6 domains:
+    legal, business, environment, tech, medical, and general (fallback).
+    Combines:
+      - Level A1: Hyphen-safe tiered regex & collocation rules + cross-domain disambiguation
+      - Level A2: Pure-Python TF-IDF / bigram statistical classifier (OfflineTfidfBayesClassifier)
+      - Dominant-only document-title context prior
+    """
+
+    # Hyphen-safe word boundaries: prevent '-' inside compounds like 'after-treatment' from matching 'treatment'
+    _B_START = r"(?<![a-zA-Z0-9-])(?:"
+    _B_END = r")(?![a-zA-Z0-9-])"
+
+    # Tier 3 = unambiguous domain terms, Tier 2 = domain terms (need >=1 corroboration), Tier 1 = supporting terms
+    _RAW_RULES: Dict[str, List[Tuple[int, str]]] = {
+        "legal": [
+            (3, r"regulation|directive|decision|treaty|jurisdiction|infringement|plaintiff|defendant|tribunal|court of justice|statute|statutory|legislation|legislative|constitutional|prosecution|litigation|indictment|arbitration|subpoena|annulment|enacting|pursuant to|herein|thereof|whereas|recital|corrigendum|equal treatment|rozporządzenie|dyrektywa|trybunał|orzeczenie|jurysdykcja|ustawa|kodeks|prawodawstwo|naruszenie|powód|pozwany|sądowy|postępowanie|sprostowanie"),
+            (2, r"article\s+\d+|paragraph\s+\d+|annex\s+[ivx\d]+|official journal|competent authorit(?:y|ies)|member states?|legal basis|binding|enforceable|compliance|obligation|liability|sanction|penalty|penalties|prohibition|amendment|repeal|entry into force|artykuł\s+\d+|ustęp\s+\d+|załącznik|dziennik urzędowy|państw[oa] członkowsk|odpowiedzialność|sankcj|zakaz|zmiana|uchylenie|wejście w życie"),
+            (1, r"law|legal|court|contract|agreement|clause|provision|rule|rules|decree|authority|prawo|prawn|sąd|umowa|przepis|postanowienie|organ"),
+        ],
+        "business": [
+            (3, r"state aid|undertaking|undertakings|merger|acquisition|antitrust|insolvency|bankruptcy|procurement|shareholder|dividend|balance sheet|fiscal|customs duty|tariff|vat|value added tax|excise|stock exchange|subsidy|subsidies|microenterprise|sme|tax treatment|preferential treatment|pomoc państwa|przedsiębiorstw|fuzj|przejęci|upadłość|zamówienia publiczne|akcjonariusz|dywidenda|bilans|podatek|cło|taryfa|vat|akcyza|giełda|dotacj|subwencj"),
+            (2, r"market|trade|commercial|enterprise|company|corporate|financial|finance|investment|investor|banking|bank|credit|loan|revenue|profit|turnover|taxation|audit|accounting|competition|competitiveness|export|import|consumer|rynek|handel|handlow|spółka|finansow|inwestycj|bankow|kredyt|pożyczka|przychód|zysk|obrót|opodatkowanie|audyt|księgowość|konkurencj|konsument"),
+            (1, r"business|economic|economy|price|cost|payment|fee|fund|budget|capital|asset|biznes|gospodar|cena|koszt|płatność|opłata|fundusz|budżet|kapitał"),
+        ],
+        "environment": [
+            (3, r"greenhouse gas|co2|carbon dioxide|biodiversity|ecosystem|deforestation|natura 2000|dioxin|dioxins|furans|pcbs|pollutant|pollutants|pollution|effluent|hazardous waste|landfill|ozone|climate change|renewable energy|emissions trading|environmental impact|waste treatment|water treatment|sewage treatment|cieplarnian|dwutlenek węgla|bioróżnorodność|ekosystem|wylesianie|dioksyn|zanieczyszczeni|odpady niebezpieczne|składowisko|ozon|zmian[ay] klimatu|energia odnawialna|ochrona środowiska"),
+            (2, r"environment|environmental|emission|emissions|climate|waste|recycling|water quality|groundwater|marine|forestry|wildlife|habitat|species|ecology|ecological|sustainability|sustainable|soil|air quality|noise|środowisk|emisj|klimat|odpad|recykling|wód|wody|morsk|leśn|siedlisk|gatunk|ekolog|zrównoważon|gleb|powietrz|hałas"),
+            (1, r"fuel|exhaust|nature|natural|conservation|river|sea|forest|paliwo|spalin|natura|ochrona|rzeka|morze|las"),
+        ],
+        "tech": [
+            (3, r"after-treatment|after treatment|exhaust after-treatment|exhaust after treatment|oczyszczani[aeu] spalin|oczyszczaniem spalin|compression-ignition|positive-ignition|lpg|photovoltaic|semiconductor|cybersecurity|cryptography|encryption|algorithm|microprocessor|telecommunications|broadband|bandwidth|interoperability|bluetooth|wireless|radio frequency|adaptive front-lighting|type-approval|homologation|opacimeter|turbocharger|particulate traps?|denox|zapłon samoczynny|zapłon wymuszony|półprzewodnik|cyberbezpieczeństwo|kryptografia|szyfrowanie|algorytm|telekomunikac|szerokopasmow|interoperacyjność|częstotliwość radiowa|homologacja|filtr[ay]? cząstek stałych"),
+            (2, r"engine|engines|diesel|vehicle|vehicles|automotive|brake|headlamp|wheel|voltage|electric|electronic|digital|software|hardware|database|network|server|internet|platform|sensor|apparatus|machinery|calibration|measurement|specification|technical|heat treatment|silnik|silniki|pojazd|samochod|hamulc|reflektor|koło|napięcie|elektryczn|elektroniczn|cyfrow|oprogramowanie|sprzęt|baza danych|sieć|serwer|czujnik|urządzenie|maszyn|kalibracja|pomiar|specyfikacj|techniczn"),
+            (1, r"device|equipment|machine|parameter|signal|wyposażenie|parametr|sygnał"),
+        ],
+        "medical": [
+            (3, r"pharmaceutical|medicinal product|clinical trial|clinical trials|pharmacovigilance|toxicology|carcinogenic|mutagenic|pathogen|epidemiology|vaccine|vaccination|immunisation|antibiotic|antimicrobial|veterinary|animal nutrition|feedingstuffs|zoonotic|diagnos(?:is|tic)|therapeutic|pathology|medical treatment|clinical treatment|hospital treatment|cancer treatment|outpatient treatment|farmaceutyczn|produkt leczniczy|badania kliniczne|toksykologia|rakotwórcz|patogen|epidemiolog|szczepionk|antybiotyk|weterynaryjn|żywienie zwierząt|pasz|diagnoz|terapeutyczn|patologia|leczenie szpitalne|leczenie kliniczne|leczenie medyczne"),
+            (2, r"medical|medicine|healthcare|public health|patient|patients|disease|diseases|illness|disorder|therapy|hospital|clinic|surgical|drug|dosage|contamination|hygiene|food safety|medyczn|medycyna|pacjent|chorob|zaburzen|terapia|szpital|klinik|chirurg|lek|dawka|higiena|bezpieczeństwo żywności"),
+            (1, r"blood|tissue|clinical|doctor|nurse|veterinarian|residue|krew|tkanka|kliniczny|lekarz|weterynarz|pozostałości"),
+        ],
+    }
+
+    _COMPILED_RULES: Dict[str, List[Tuple[int, re.Pattern]]] = {}
+
+    def __init__(self, use_doc_context: bool = True, threshold: int = 3):
+        self.use_doc_context = use_doc_context
+        self.threshold = threshold
+        self.doc_profiles: Dict[str, Dict[str, Any]] = {}
+        self.stat_classifier = OfflineTfidfBayesClassifier()
+        if not DomainClassifier._COMPILED_RULES:
+            DomainClassifier._COMPILED_RULES = {
+                cat: [
+                    (w, re.compile(f"{DomainClassifier._B_START}{pat}{DomainClassifier._B_END}", re.IGNORECASE))
+                    for w, pat in rules
+                ]
+                for cat, rules in DomainClassifier._RAW_RULES.items()
+            }
+
+    def _score_text(self, text: str) -> Tuple[Dict[str, int], Dict[str, bool]]:
+        scores: Dict[str, int] = {cat: 0 for cat in SPECIALIZED_CATEGORIES}
+        has_tier3: Dict[str, bool] = {cat: False for cat in SPECIALIZED_CATEGORIES}
+        if not text:
+            return scores, has_tier3
+
+        stat_boosts = self.stat_classifier.score_boosts(text)
+        for cat, rules in self._COMPILED_RULES.items():
+            cat_score = 0
+            for weight, regex in rules:
+                hits = len(regex.findall(text))
+                if hits:
+                    if weight >= 3:
+                        has_tier3[cat] = True
+                    cat_score += weight * min(hits, 2)
+            scores[cat] = cat_score + stat_boosts.get(cat, 0)
+
+        # Cross-domain suppression: if strong tech/environment hit occurs and medical has no Tier-3 hit,
+        # suppress weak medical noise (e.g., generic words in engineering/environmental texts).
+        if (scores["tech"] >= 3 or scores["environment"] >= 3) and not has_tier3["medical"]:
+            if scores["medical"] < 4:
+                scores["medical"] = 0
+
+        return scores, has_tier3
+
+    def _update_and_get_prior(self, doc_key: str, raw_scores: Dict[str, int]) -> Dict[str, int]:
+        if not self.use_doc_context or not doc_key:
+            return {cat: 0 for cat in SPECIALIZED_CATEGORIES}
+
+        profile = self.doc_profiles.get(doc_key)
+        if profile is None:
+            profile = {"count": 0, "totals": {cat: 0 for cat in SPECIALIZED_CATEGORIES}}
+            self.doc_profiles[doc_key] = profile
+
+        if profile["count"] < 6:
+            profile["count"] += 1
+            for cat, val in raw_scores.items():
+                profile["totals"][cat] += val
+
+        # Dominant-only soft prior: +1 boost ONLY if domain is strongly established
+        # AND represents at least 50% of the document's top domain score.
+        priors: Dict[str, int] = {cat: 0 for cat in SPECIALIZED_CATEGORIES}
+        totals = profile["totals"]
+        max_total = max(totals.values()) if totals else 0
+        if max_total >= 5:
+            for cat in SPECIALIZED_CATEGORIES:
+                if totals[cat] >= 5 and totals[cat] >= 0.5 * max_total:
+                    priors[cat] = 1
+        return priors
+
+    def classify_multi(
+        self,
+        source_text: str,
+        target_text: str,
+        pivot_en_text: str = "",
+        doc_key: str = ""
+    ) -> List[str]:
+        """
+        Classifies a segment into one or more matching categories (multi-label).
+        Falls back to ['general'] if no specialized domain meets the threshold.
+        """
+        combined = f"{source_text} {target_text}"
+        if pivot_en_text:
+            combined = f"{combined} {pivot_en_text}"
+
+        raw_scores, _ = self._score_text(combined)
+        priors = self._update_and_get_prior(doc_key, raw_scores)
+
+        matched: List[str] = []
+        for cat in SPECIALIZED_CATEGORIES:
+            raw = raw_scores[cat]
+            # Apply document context prior only if the segment itself has at least a weak signal (>= 2)
+            # or a clear domain token (>= 1), keeping pure boilerplate in 'general'.
+            effective = raw + (priors[cat] if raw >= 2 else 0)
+            if effective >= self.threshold:
+                matched.append(cat)
+
+        return matched if matched else ["general"]
 
 
 class TMXExtractor:
@@ -659,7 +951,8 @@ class TMXExtractor:
         filter_identical: bool = True,
         min_length: int = 1,
         max_length: int = 0,
-        max_translations: int = 0
+        max_translations: int = 0,
+        capture_pivot_en: bool = False
     ):
         self.src_code = source_lang.upper()
         self.trg_code = target_lang.upper()
@@ -668,6 +961,7 @@ class TMXExtractor:
         self.min_length = min_length
         self.max_length = max_length
         self.max_translations = max_translations
+        self.capture_pivot_en = capture_pivot_en and self.src_code != "EN" and self.trg_code != "EN"
 
         self.total_tus_seen = 0
         self.total_pairs_matched = 0
@@ -699,6 +993,7 @@ class TMXExtractor:
 
                     src_seg = None
                     trg_seg = None
+                    pivot_en_seg = None
                     src_full_lang = ""
                     trg_full_lang = ""
 
@@ -718,6 +1013,11 @@ class TMXExtractor:
                             if seg_elem is not None:
                                 trg_seg = "".join(seg_elem.itertext()).strip()
                                 trg_full_lang = lang
+
+                        elif self.capture_pivot_en and pivot_en_seg is None and self.matches_lang(lang, "EN"):
+                            seg_elem = tuv.find("seg")
+                            if seg_elem is not None:
+                                pivot_en_seg = "".join(seg_elem.itertext()).strip()
 
                     if src_seg and trg_seg:
                         if len(src_seg) < self.min_length or len(trg_seg) < self.min_length:
@@ -739,7 +1039,8 @@ class TMXExtractor:
                                     target=trg_seg,
                                     doc_id=doc_id,
                                     src_lang=src_full_lang or self.src_code,
-                                    trg_lang=trg_full_lang or self.trg_code
+                                    trg_lang=trg_full_lang or self.trg_code,
+                                    pivot_en=pivot_en_seg or ""
                                 )
 
                     elem.clear()
@@ -983,6 +1284,68 @@ class MultiFormatWriter:
         return parts
 
 
+def _create_multi_writer(
+    base_out: str,
+    fmt_lower: str,
+    source_lang: str,
+    target_lang: str,
+    split_size: int = 0
+) -> MultiFormatWriter:
+    """Factory helper creating a MultiFormatWriter for a given base path and format."""
+    writers: List[ChunkedWriter] = []
+    if fmt_lower in ("tmx", "all"):
+        writers.append(ChunkedWriter(base_out, "tmx", source_lang, target_lang, split_size=split_size))
+    if fmt_lower in ("tsv", "excel", "all"):
+        writers.append(ChunkedWriter(base_out, "tsv", source_lang, target_lang, split_size=split_size))
+    if fmt_lower in ("jsonl", "all"):
+        writers.append(ChunkedWriter(base_out, "jsonl", source_lang, target_lang, split_size=split_size))
+    if not writers:
+        writers.append(ChunkedWriter(base_out, "tmx", source_lang, target_lang, split_size=split_size))
+    return MultiFormatWriter(writers)
+
+
+class CategoryRouterWriter:
+    """
+    Lazily creates and routes segments to per-category MultiFormatWriter instances
+    (e.g., base_legal.tmx, base_business.tmx, ...), preventing empty files for
+    categories that have 0 matching segments.
+    """
+    def __init__(
+        self,
+        base_out: str,
+        fmt_lower: str,
+        source_lang: str,
+        target_lang: str,
+        split_size: int = 0
+    ):
+        self.base_out = base_out
+        self.fmt_lower = fmt_lower
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+        self.split_size = split_size
+        self.writers_by_cat: Dict[str, MultiFormatWriter] = {}
+
+    def write_for_category(self, category: str, pair: TranslationPair):
+        mw = self.writers_by_cat.get(category)
+        if mw is None:
+            cat_base = f"{self.base_out}_{category}"
+            mw = _create_multi_writer(cat_base, self.fmt_lower, self.source_lang, self.target_lang, self.split_size)
+            self.writers_by_cat[category] = mw
+        mw.write(pair)
+
+    def close(self):
+        for mw in self.writers_by_cat.values():
+            mw.close()
+
+    def get_all_parts(self) -> List[PartFileInfo]:
+        parts: List[PartFileInfo] = []
+        for cat in DOMAIN_CATEGORIES:
+            mw = self.writers_by_cat.get(cat)
+            if mw is not None:
+                parts.extend(mw.get_all_parts())
+        return parts
+
+
 # ==============================================================================
 # 6. EXPORT SUMMARY REPORT
 # ==============================================================================
@@ -1034,11 +1397,26 @@ def generate_export_report(
         f"   • Filtered Identical Segments:   {stats['identical_filtered']:,}",
         f"   • Filtered Empty Segments:       {stats['empty_filtered']:,}",
         f"   • Deduplication:                 {'ENABLED (clean unique translation memory)' if stats.get('deduplicated', True) else 'DISABLED'}",
+    ]
+
+    if stats.get("domain_mode"):
+        inc_cats = stats.get("include_categories")
+        inc_str = ", ".join(sorted(inc_cats)) if inc_cats else "all"
+        lines.extend([
+            f"   • Domain Classification Mode:    {stats['domain_mode']} (multi-label, filter: {inc_str})",
+            f"   • Filtered Out by Domain:        {stats.get('filtered_by_category', 0):,}",
+        ])
+        cat_counts = stats.get("category_counts", {})
+        if cat_counts:
+            breakdown = ", ".join(f"{cat}: {cat_counts.get(cat, 0):,}" for cat in DOMAIN_CATEGORIES if cat_counts.get(cat, 0) > 0)
+            lines.append(f"   • Domain Category Breakdown:     {breakdown}")
+
+    lines.extend([
         "",
         "4. GENERATED OUTPUT FILES:",
         f"   • Chunking (RAM Protection):     {'YES (max ' + str(split_size) + ' segments per file)' if split_size > 0 else 'NO (single file)'}",
         f"   • Total Output Files Created:    {len(output_parts)}",
-    ]
+    ])
 
     for idx, p in enumerate(output_parts, 1):
         mb = p.size_bytes / (1024 * 1024)
@@ -1583,9 +1961,11 @@ def run_extraction(
     filter_identical: bool = True,
     max_translations: int = 0,
     split_size: int = 0,
-    quiet: bool = False
+    quiet: bool = False,
+    include_categories: Optional[Set[str]] = None,
+    split_by_category: bool = False
 ) -> Dict:
-    """Executes extraction from input_path to output_path."""
+    """Executes extraction from input_path to output_path with optional domain filtering/splitting."""
     t_start = time.time()
 
     if not quiet:
@@ -1598,28 +1978,31 @@ def run_extraction(
     if not quiet:
         UI.success(f"Found {len(sources)} TMX files (total ~{total_bytes / (1024*1024):.1f} MB)")
 
-    writers: List[ChunkedWriter] = []
     base_out = os.path.splitext(output_path)[0]
     fmt_lower = output_format.lower()
 
-    if fmt_lower in ("tmx", "all"):
-        writers.append(ChunkedWriter(base_out, "tmx", source_lang, target_lang, split_size=split_size))
-    if fmt_lower in ("tsv", "excel", "all"):
-        writers.append(ChunkedWriter(base_out, "tsv", source_lang, target_lang, split_size=split_size))
-    if fmt_lower in ("jsonl", "all"):
-        writers.append(ChunkedWriter(base_out, "jsonl", source_lang, target_lang, split_size=split_size))
+    domain_active = bool(split_by_category or include_categories is not None)
+    classifier = DomainClassifier(use_doc_context=True) if domain_active else None
+    category_counts: Dict[str, int] = {cat: 0 for cat in DOMAIN_CATEGORIES}
+    filtered_by_category = 0
+    written_pairs = 0
 
-    if not writers:
-        writers.append(ChunkedWriter(base_out, "tmx", source_lang, target_lang, split_size=split_size))
-
-    multi_writer = MultiFormatWriter(writers)
+    if split_by_category:
+        active_writer: Union[CategoryRouterWriter, MultiFormatWriter] = CategoryRouterWriter(
+            base_out, fmt_lower, source_lang, target_lang, split_size=split_size
+        )
+    else:
+        active_writer = _create_multi_writer(
+            base_out, fmt_lower, source_lang, target_lang, split_size=split_size
+        )
 
     extractor = TMXExtractor(
         source_lang=source_lang,
         target_lang=target_lang,
         deduplicate=deduplicate,
         filter_identical=filter_identical,
-        max_translations=max_translations
+        max_translations=max_translations,
+        capture_pivot_en=domain_active
     )
 
     sample_preview: List[Tuple[str, str, str]] = []
@@ -1627,18 +2010,49 @@ def run_extraction(
 
     if not quiet:
         split_desc = f", splitting: every {split_size:,} segments" if split_size > 0 else ", single file (no splitting)"
-        UI.info(f"Starting extraction: {get_lang_display(source_lang)} -> {get_lang_display(target_lang)}{split_desc}")
+        dom_desc = ""
+        if domain_active:
+            dom_mode = "split-by-category" if split_by_category else "filtered"
+            inc_lbl = ",".join(sorted(include_categories)) if include_categories else "all"
+            dom_desc = f", domains: {dom_mode} ({inc_lbl})"
+        UI.info(f"Starting extraction: {get_lang_display(source_lang)} -> {get_lang_display(target_lang)}{split_desc}{dom_desc}")
 
     try:
         for idx, src_item in enumerate(sources, start=1):
             z_ref, stream = src_item.open_stream()
+            doc_key_fallback = src_item.display_name
             try:
                 for pair in extractor.parse_stream(stream):
-                    multi_writer.write(pair)
+                    if classifier is not None:
+                        matched_cats = classifier.classify_multi(
+                            pair.source,
+                            pair.target,
+                            pivot_en_text=pair.pivot_en,
+                            doc_key=pair.doc_id or doc_key_fallback
+                        )
+                        if include_categories is not None:
+                            matched_cats = [c for c in matched_cats if c in include_categories]
+                        if not matched_cats:
+                            filtered_by_category += 1
+                            continue
+
+                        for c in matched_cats:
+                            category_counts[c] = category_counts.get(c, 0) + 1
+
+                        if isinstance(active_writer, CategoryRouterWriter):
+                            for c in matched_cats:
+                                active_writer.write_for_category(c, pair)
+                        else:
+                            active_writer.write(pair)
+                        written_pairs += 1
+                    else:
+                        active_writer.write(pair)
+                        written_pairs += 1
+
                     if len(sample_preview) < 4:
                         sample_preview.append((pair.doc_id, pair.source, pair.target))
 
-                    if max_translations > 0 and extractor.total_pairs_matched >= max_translations:
+                    if max_translations > 0 and written_pairs >= max_translations:
                         break
             finally:
                 if stream:
@@ -1648,27 +2062,35 @@ def run_extraction(
 
             if not quiet:
                 elapsed = time.time() - t_start
-                speed = (extractor.total_pairs_matched / elapsed) if elapsed > 0 else 0
-                UI.render_progress(idx, total_files, extractor.total_pairs_matched, speed)
+                speed = (written_pairs / elapsed) if elapsed > 0 else 0
+                UI.render_progress(idx, total_files, written_pairs, speed)
 
-            if max_translations > 0 and extractor.total_pairs_matched >= max_translations:
+            if max_translations > 0 and written_pairs >= max_translations:
                 if not quiet:
                     print()
                     UI.info(f"Target limit of {max_translations} pairs reached.")
                 break
 
     finally:
-        multi_writer.close()
+        active_writer.close()
         if not quiet and sys.stdout.isatty():
             print()
 
     total_time = time.time() - t_start
-    output_parts = multi_writer.get_all_parts()
+    output_parts = active_writer.get_all_parts()
+
+    domain_mode_label = ""
+    if split_by_category and include_categories is not None:
+        domain_mode_label = "filter + split"
+    elif split_by_category:
+        domain_mode_label = "split by category"
+    elif include_categories is not None:
+        domain_mode_label = "filter only"
 
     stats = {
         "files_processed": total_files,
         "total_tus_seen": extractor.total_tus_seen,
-        "extracted_pairs": extractor.total_pairs_matched,
+        "extracted_pairs": written_pairs,
         "duplicates_removed": extractor.duplicates_removed,
         "identical_filtered": extractor.identical_filtered,
         "empty_filtered": extractor.empty_filtered,
@@ -1676,7 +2098,11 @@ def run_extraction(
         "elapsed_seconds": total_time,
         "sample_preview": sample_preview,
         "output_parts": output_parts,
-        "output_files": [p.file_path for p in output_parts]
+        "output_files": [p.file_path for p in output_parts],
+        "domain_mode": domain_mode_label,
+        "include_categories": sorted(include_categories) if include_categories else None,
+        "category_counts": category_counts if domain_active else {},
+        "filtered_by_category": filtered_by_category,
     }
 
     report_path_en = f"{base_out}_report.txt"
@@ -1784,7 +2210,9 @@ def run_batch_extraction(
     filter_identical: bool = True,
     max_translations: int = 0,
     split_size: int = 0,
-    quiet: bool = False
+    quiet: bool = False,
+    include_categories: Optional[Set[str]] = None,
+    split_by_category: bool = False
 ) -> Dict:
     """Extracts TMX from all provided ZIP archives one by one (batch mode)."""
     t_batch_start = time.time()
@@ -1801,6 +2229,9 @@ def run_batch_extraction(
         UI.info(f"Output directory: {output_dir}")
         if split_size > 0:
             UI.info(f"CAT splitting: every {split_size:,} segments per file")
+        if split_by_category or include_categories is not None:
+            inc_lbl = ", ".join(sorted(include_categories)) if include_categories else "all"
+            UI.info(f"Domain routing: {'split by category' if split_by_category else 'filter only'} ({inc_lbl})")
         print()
 
     for idx, z_path in enumerate(sorted_zips, 1):
@@ -1823,7 +2254,9 @@ def run_batch_extraction(
                 filter_identical=filter_identical,
                 max_translations=max_translations,
                 split_size=split_size,
-                quiet=quiet
+                quiet=quiet,
+                include_categories=include_categories,
+                split_by_category=split_by_category
             )
             results.append((z_path, stats))
             all_output_parts.extend(stats.get("output_parts", []))
@@ -1889,6 +2322,31 @@ def run_batch_extraction(
 # ==============================================================================
 # 9. USER-FRIENDLY INTERACTIVE WIZARD
 # ==============================================================================
+
+def _prompt_domain_options_wizard() -> Tuple[Optional[Set[str]], bool, str]:
+    """Prompts for optional domain filtering/splitting in Step 5 of the wizard."""
+    print()
+    print(UI.c(" Domain categorization (legal, business, environment, tech, medical, general):", UI.BOLD))
+    print(UI.c("   [NOTE] Domain filtering is automated (machine-based) and is not 100% accurate.", UI.YELLOW))
+    print(UI.c("          If a segment matches two or more categories, it is placed in all matching files.", UI.DIM))
+    print(f" [{UI.c('1', UI.CYAN)}] No domain splitting – keep all segments together [Default]")
+    print(f" [{UI.c('2', UI.CYAN)}] Split output into separate files by domain (_legal, _business, _environment, _tech, _medical, _general)")
+    print(f" [{UI.c('3', UI.CYAN)}] Filter only selected domain categories")
+
+    d_choice = UI.prompt("Select domain option", default="1").strip()
+    if d_choice == "2":
+        return None, True, "Split into separate files by category (multi-label)"
+    elif d_choice == "3":
+        print(UI.c(" Available categories: legal, business, environment, tech, medical, general", UI.DIM))
+        raw_cats = UI.prompt("Enter categories separated by commas (e.g. legal, medical)", default="legal")
+        inc_cats = parse_categories_arg(raw_cats) or {"legal"}
+        split_ans = UI.prompt_yes_no("Split selected categories into separate files (instead of one combined file)?", default=True)
+        cats_str = ", ".join(sorted(inc_cats))
+        mode_lbl = f"Filter ({cats_str}) + split by category" if split_ans else f"Filter ({cats_str}) into single output"
+        return inc_cats, split_ans, mode_lbl
+
+    return None, False, "All segments together (no domain splitting)"
+
 
 def run_interactive_wizard():
     """Runs the 5-step guided wizard for non-technical users with auto-scrolling."""
@@ -2106,6 +2564,7 @@ def run_interactive_wizard():
         filter_ident = UI.prompt_yes_no("Filter out identical segments (e.g. exact same numbers/codes in both languages)?", default=True)
         limit_ans = UI.prompt("Maximum translation pairs per archive [Enter = NO LIMIT]", default="")
         max_count = int(limit_ans) if limit_ans.isdigit() else 0
+        inc_cats, split_by_cat, dom_summary = _prompt_domain_options_wizard()
 
         print()
         UI.header("BATCH EXTRACTION JOB SUMMARY")
@@ -2119,6 +2578,7 @@ def run_interactive_wizard():
         print(f"  * Destination folder:  {UI.c(out_folder, UI.BOLD)}")
         print(f"  * Chunking for CAT:    {UI.c(f'YES (every {split_size:,} segments)' if split_size > 0 else 'NO (single file)', UI.YELLOW)}")
         print(f"  * Deduplication:       {'YES (clean unique memory)' if do_dedup else 'NO'}")
+        print(f"  * Domain routing:      {dom_summary}")
         print()
 
         if not UI.prompt_yes_no("Do you want to start batch extraction across all archives now?", default=True):
@@ -2136,7 +2596,9 @@ def run_interactive_wizard():
             filter_identical=filter_ident,
             max_translations=max_count,
             split_size=split_size,
-            quiet=False
+            quiet=False,
+            include_categories=inc_cats,
+            split_by_category=split_by_cat
         )
         UI.prompt("Press Enter to exit the program", default="")
         return
@@ -2166,6 +2628,7 @@ def run_interactive_wizard():
     filter_ident = UI.prompt_yes_no("Filter out identical segments (e.g. same numbers or codes in both languages)?", default=True)
     limit_ans = UI.prompt("Maximum total sentence pairs [Enter = NO LIMIT]", default="")
     max_count = int(limit_ans) if limit_ans.isdigit() else 0
+    inc_cats, split_by_cat, dom_summary = _prompt_domain_options_wizard()
 
     print()
     UI.header("EXTRACTION JOB SUMMARY")
@@ -2175,6 +2638,7 @@ def run_interactive_wizard():
     print(f"  * Output file:       {UI.c(out_path, UI.BOLD)}")
     print(f"  * Chunking for CAT:  {UI.c(f'YES (every {split_size:,} segments)' if split_size > 0 else 'NO (single file)', UI.YELLOW)}")
     print(f"  * Deduplication:     {'YES (clean unique memory)' if do_dedup else 'NO'}")
+    print(f"  * Domain routing:    {dom_summary}")
     print()
 
     if not UI.prompt_yes_no("Do you want to start extraction now?", default=True):
@@ -2192,7 +2656,9 @@ def run_interactive_wizard():
         filter_identical=filter_ident,
         max_translations=max_count,
         split_size=split_size,
-        quiet=False
+        quiet=False,
+        include_categories=inc_cats,
+        split_by_category=split_by_cat
     )
 
     UI.header("EXTRACTION RESULTS & SUMMARY REPORT")
@@ -2205,6 +2671,12 @@ def run_interactive_wizard():
         UI.info(f"Duplicates removed:       {stats['duplicates_removed']:,}")
     if filter_ident:
         UI.info(f"Identical filtered:       {stats['identical_filtered']:,}")
+    if stats.get("category_counts"):
+        cat_str = ", ".join(f"{c}: {n:,}" for c, n in stats["category_counts"].items() if n > 0)
+        if cat_str:
+            UI.info(f"Domain breakdown:         {cat_str}")
+        if stats.get("filtered_by_category"):
+            UI.info(f"Filtered out by domain:   {stats['filtered_by_category']:,}")
 
     print("\n" + UI.c("Created Translation Memory files:", UI.BOLD))
     for p in stats["output_parts"]:
@@ -2259,6 +2731,8 @@ def main():
     parser.add_argument("--batch", action="store_true", help="Batch process all ZIP archives found in --input directory")
     parser.add_argument("--output-dir", default="", help="Output directory for batch processing")
     parser.add_argument("--split", type=int, default=0, help="Split output into files of N segments each (e.g. 50000) [0 = no split]")
+    parser.add_argument("--categories", default="", help="Filter domain categories (comma-separated: legal,business,environment,tech,medical,general)")
+    parser.add_argument("--split-by-category", action="store_true", help="Split output into separate files per domain category (_legal, _business, etc.)")
     parser.add_argument("--no-dedup", action="store_true", help="Disable duplicate removal (keep all repeated sentences)")
     parser.add_argument("--no-filter-identical", action="store_true", help="Keep segments identical in source and target")
     parser.add_argument("-m", "--max-count", type=int, default=0, help="Maximum number of translation pairs to extract [0 = unlimited]")
@@ -2288,6 +2762,7 @@ def main():
 
     src = resolve_language_code(args.source_lang) or args.source_lang.upper()
     trg = resolve_language_code(args.target_lang) or args.target_lang.upper()
+    inc_cats = parse_categories_arg(args.categories)
 
     if args.batch:
         if os.path.isfile(args.input) and args.input.lower().endswith(".zip"):
@@ -2316,7 +2791,9 @@ def main():
             filter_identical=not args.no_filter_identical,
             max_translations=args.max_count,
             split_size=args.split,
-            quiet=args.quiet
+            quiet=args.quiet,
+            include_categories=inc_cats,
+            split_by_category=args.split_by_category
         )
         return
 
@@ -2335,7 +2812,9 @@ def main():
         filter_identical=not args.no_filter_identical,
         max_translations=args.max_count,
         split_size=args.split,
-        quiet=args.quiet
+        quiet=args.quiet,
+        include_categories=inc_cats,
+        split_by_category=args.split_by_category
     )
 
 

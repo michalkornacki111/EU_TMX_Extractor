@@ -575,11 +575,13 @@
       </div>
 
       <div class="step-box">
-        <h4>Step 5 of 5: Quality & Deduplication Options</h4>
+        <h4>Step 5 of 5: Quality, Deduplication & Domain Categorization</h4>
         <ul>
           <li><strong>Deduplication [Y/n]:</strong> Removes redundant repetitions, keeping only unique sentence pairs.</li>
           <li><strong>Identical Segment Filter [Y/n]:</strong> Filters out non-translatable units where source and target are identical (e.g. pure digits, article numbering).</li>
           <li><strong>Max pairs limit:</strong> Leave blank for no limit, or specify a test limit (e.g. 1000).</li>
+          <li><strong>Domain Categorization (Optional):</strong> Choose whether to keep all segments together <code>[1 - Default]</code>, automatically split output into separate domain files (<code>_legal</code>, <code>_business</code>, <code>_environment</code>, <code>_tech</code>, <code>_medical</code>, <code>_general</code>) <code>[2]</code>, or filter only selected categories <code>[3]</code>.<br>
+          <em>Note: Domain filtering is automated (machine-based) and is not 100% accurate. If a segment matches two or more categories, it is placed in all matching files.</em></li>
         </ul>
       </div>
 
