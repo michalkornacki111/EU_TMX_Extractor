@@ -22,6 +22,7 @@ Designed for translators, terminologists, Language Service Providers (LSPs), tra
 - **10-Category Market-Aligned Domain Classification (`--categories`, `--split-by-category`):**
   - Splits or filters segments into **10 translation-market verticals**: `legal`, `finance`, `trade`, `it_telecom`, `engineering`, `energy_env`, `medical`, `chemicals`, `agri_food`, and `general`.
   - Powered by a two-stage pure-Python offline engine combining hyphen/Unicode-safe tiered collocation rules, per-language anti-doubling scoring, TF-IDF/bigram cosine similarity, and dominant-only document-title context priors.
+  - **Language Pair Scope (`EN`/`PL` + DGT-TM `EN` Pivot):** Classification dictionaries and statistical prototypes are built for **English (`EN`) and Polish (`PL`)**. Pairs without `EN` or `PL` (e.g., `FR ➔ DE`) are classified via the sibling `<tuv lang="EN">` segment **only when extracting from official multilingual DGT-TM packages**; standalone bilingual `.tmx` files lacking `EN` or `PL` (e.g., a pre-extracted `FR ➔ DE` file) **cannot** be categorized by domain.
   - **Multi-label routing:** Segments matching two or more specialized domains are written to all matching category files. *(Note: Automated machine classification is heuristic and not 100% accurate.)*
 - **Multiple Export Formats:** Standard **TMX 1.4** (`.tmx`), **Excel / TSV** (`.tsv`), **JSONL** (`.jsonl` for AI/LLM fine-tuning), or all simultaneously.
 - **Deduplication & Automatic Export Reports:** Removes duplicate pairs and identical source/target segments, and generates detailed `*_report.txt` summaries with domain breakdowns and sample previews.
@@ -49,10 +50,15 @@ Designed for translators, terminologists, Language Service Providers (LSPs), tra
 
 Developing an accurate, fast, **100% offline** domain classifier for European Union translation memories required addressing both the structural properties of the DGT-TM corpus and the practical requirements of professional CAT workflows.
 
-### 1. Corpus Constraints & English-Pivot Lookup
+### 1. Corpus Constraints, Language Scope & English-Pivot Lookup
 Official DGT-TM XML files store translation units (`<tu>`) containing a document identifier (`<prop type="Txt::Doc. No.">CELEX_OR_EFTA_ID</prop>`) and parallel language segments (`<tuv lang="XX-YY"><seg>...</seg></tuv>`), **without** embedded EuroVoc descriptors or subject-matter tags. Domain classification must therefore operate directly on segment text at streaming speeds (10,000+ pairs/sec) using only the Python standard library.
 
-Because virtually every `<tu>` in DGT-TM contains an English segment (`EN-GB` / `EN`), whenever a user extracts a non-English pair (e.g., `DE ➔ PL` or `FR ➔ ES`), the XML parser automatically captures the sibling `EN` `<tuv>` within the same `<tu>` as an internal classification pivot (`capture_pivot_en=True`), guaranteeing consistent domain recall across all 24 EU languages.
+> [!IMPORTANT]
+> **Language Pair Availability (`EN` / `PL` Dictionaries & Multilingual Pivot):**
+> The built-in rule dictionaries and TF-IDF prototypes recognize **English (`EN`)** and **Polish (`PL`)** terminology (they do not include French, German, Spanish, etc. lexicons). Domain categorization therefore operates as follows:
+> - **Pairs containing `EN` or `PL` (e.g., `EN ➔ PL`, `EN ➔ DE`, `FR ➔ EN`, `DE ➔ PL`):** Supported on **all** input files (both multilingual DGT-TM archives and standalone bilingual `.tmx` files).
+> - **Pairs without `EN` or `PL` (e.g., `FR ➔ DE`, `ES ➔ IT`) on official multilingual DGT-TM packages:** **Supported** via automatic *English-pivot lookup* (`capture_pivot_en=True`). Because virtually every `<tu>` in raw DGT-TM archives embeds ~24 EU languages including `<tuv lang="EN-GB">`, the parser inspects the sibling `EN` segment inside the same `<tu>` to classify the unit while writing only `FR` and `DE` to the output `.tmx`.
+> - **Pairs without `EN` or `PL` (e.g., `FR ➔ DE`) on standalone bilingual `.tmx` files:** **Not available.** If the input `.tmx` contains *only* `FR` and `DE` (no `EN` or `PL` `<tuv>` inside `<tu>`), the classifier cannot match terminology, emits a warning in the console and export report, and routes segments to `general`.
 
 ### 2. Taxonomy Calibration: Empirical Corpus Audit + LSP Market Alignment
 Rather than relying on arbitrary keyword lists, the 10-category taxonomy was designed at the intersection of two analyses:
@@ -160,14 +166,14 @@ EU_TMX_Extractor/
 ├── LICENSE                 # MIT License
 ├── run_e2e_tests.py        # Automated E2E test runner
 └── tests/
-    └── test_e2e.py         # End-to-end test suite (23 tests)
+    └── test_e2e.py         # End-to-end test suite (24 tests)
 ```
 
 ---
 
 ## 🧪 Running Tests
 
-The project uses only Python's standard library and includes an automated end-to-end test suite (23 tests) covering TMX 1.4 XML validation, RAM-protection chunking, batch ZIP resilience, Windows/macOS/Linux console compatibility, repository downloads, and 10-category domain classification (including polysemy disambiguation, hyphenated compounds, and multi-label routing):
+The project uses only Python's standard library and includes an automated end-to-end test suite (24 tests) covering TMX 1.4 XML validation, RAM-protection chunking, batch ZIP resilience, Windows/macOS/Linux console compatibility, repository downloads, and 10-category domain classification (including polysemy disambiguation, hyphenated compounds, multi-label routing, and `EN`-pivot vs. standalone non-`EN`/`PL` bilingual file handling):
 
 ```bash
 python3 run_e2e_tests.py
@@ -177,7 +183,8 @@ python3 run_e2e_tests.py
 
 ## 📜 Attribution & License
 
-Developed by **Michał Kornacki** (in Antigravity, 2026) and released under the [**MIT License**](LICENSE).
+- **Author:** **Michał Kornacki, PhD**, University of Łódź, ORCID: [https://orcid.org/0000-0002-0694-004X](https://orcid.org/0000-0002-0694-004X) *(in Antigravity, 2026)*
+- **License:** Released under the [**MIT License**](LICENSE).
 
 Built upon and inspired by:
 - **`TMXtract.jar`** – Official tool by the European Commission Directorate-General for Translation (DGT) / Joint Research Centre (JRC), 2013.
