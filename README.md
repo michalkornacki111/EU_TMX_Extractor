@@ -1,7 +1,7 @@
 # EU Translation Memory Extractor (DGT-TM)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version 2.5](https://img.shields.io/badge/Version-2.5-indigo.svg)](#)
+[![Version 2.6](https://img.shields.io/badge/Version-2.6-indigo.svg)](#)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-green.svg)](https://www.python.org/downloads/)
 [![TMX 1.4](https://img.shields.io/badge/Standard-TMX%201.4-orange.svg)](#)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-None%20(stdlib%20only)-teal.svg)](#)
@@ -17,10 +17,10 @@ Designed for translators, terminologists, Language Service Providers (LSPs), tra
 - **1-Click Launchers (Zero Terminal Setup):** Double-click launchers for Windows (`run_windows.bat`), macOS (`run_mac.command`), and Linux (`run_linux.sh`), with automatic UTF-8 & Windows Console ANSI/VT initialization.
 - **5-Step Interactive Wizard:** Guided step-by-step assistant with clean top breadcrumb banners and automatic viewport scrolling.
 - **Official EU Repository Downloader (`data.europa.eu`):** Download individual volumes, full years, or the entire DGT-TM repository (87 ZIP volumes, 2004–2025) into a selectable destination folder (default: `/TMX`), complete with a pre-flight **disk space check**, ZIP integrity verification, and resume/skip support.
-- **Sequential Batch Processing (`--batch`):** Process an entire folder of `.zip` archives one by one, resilient to corrupted archives, generating per-volume TMX files and a master summary report.
-- **CAT Tool RAM Protection (`--split`):** Splits large TMX outputs into manageable, standalone TMX 1.4 XML chunks (`_part01.tmx`, `_part02.tmx`, ...; default 50,000 segments) to prevent SDL Trados Studio and memoQ from freezing during import.
+- **Unified Multi-ZIP Batch Extraction (`--batch`):** Streams an entire folder of `.zip` archives (up to all 87 DGT-TM volumes) into **one unified output** using your chosen base filename, with **global 96-bit `blake2b` cross-volume deduplication** and fault-tolerant skipping of corrupted archives. *(Optional `--per-zip` flag preserves legacy one-file-per-ZIP output.)*
+- **CAT Tool RAM Protection (`--split`):** Splits large TMX outputs into manageable, standalone TMX 1.4 XML chunks (`_part01.tmx`, `_part02.tmx`, ...) with built-in wizard presets for **50,000**, **100,000**, **200,000**, and **300,000** segments (or any custom limit) to prevent SDL Trados Studio and memoQ from freezing during import.
 - **10-Category Market-Aligned Domain Classification (`--categories`, `--split-by-category`):**
-  - Splits or filters segments into **10 translation-market verticals**: `legal`, `finance`, `trade`, `it_telecom`, `engineering`, `energy_env`, `medical`, `chemicals`, `agri_food`, and `general`.
+  - Splits or filters segments into **10 translation-market verticals**: `legal`, `finance`, `trade`, `it_telecom`, `engineering`, `energy_env`, `medical`, `chemicals`, `agri_food`, and `general`, organizing each category into its own dedicated subfolder (`legal/`, `finance/`, `medical/`, ...) for effortless bulk CAT import.
   - Powered by a two-stage pure-Python offline engine combining hyphen/Unicode-safe tiered collocation rules, per-language anti-doubling scoring, TF-IDF/bigram cosine similarity, and dominant-only document-title context priors.
   - **Language Pair Scope (`EN`/`PL` + DGT-TM `EN` Pivot):** Classification dictionaries and statistical prototypes are built for **English (`EN`) and Polish (`PL`)**. Pairs without `EN` or `PL` (e.g., `FR ➔ DE`) are classified via the sibling `<tuv lang="EN">` segment **only when extracting from official multilingual DGT-TM packages**; standalone bilingual `.tmx` files lacking `EN` or `PL` (e.g., a pre-extracted `FR ➔ DE` file) **cannot** be categorized by domain.
   - **Multi-label routing:** Segments matching two or more specialized domains are written to all matching category files. *(Note: Automated machine classification is heuristic and not 100% accurate.)*
@@ -120,8 +120,11 @@ python3 tmx_extractor.py -i Vol_2025.new_1.zip -s EN -t PL -o memory_en_pl.tmx -
 # Filter only selected categories (supports canonical names and shorthand aliases)
 python3 tmx_extractor.py -i Vol_2025.new_1.zip -s EN -t PL -o memory_en_pl.tmx --categories legal,finance,medical --split-by-category
 
-# Batch process all ZIP archives in a directory
-python3 tmx_extractor.py -i ../TMX --batch -s EN -t PL --output-dir ./results --split 50000
+# Merge all ZIP archives in a directory into unified category subfolders & 100,000-segment chunks
+python3 tmx_extractor.py -i ../TMX --batch -s EN -t PL -o eu_dgt_en_pl.tmx --output-dir ./results --split-by-category --split 100000
+
+# Legacy batch mode: write separate files per ZIP archive
+python3 tmx_extractor.py -i ../TMX --batch --per-zip -s EN -t PL --output-dir ./results --split 50000
 
 # Download the entire official DGT-TM repository (2004–2025)
 python3 tmx_extractor.py --download-repo --dest-dir ../TMX
@@ -139,11 +142,12 @@ python3 tmx_extractor.py --license
 | `-t`, `--target-lang` | Target language code or name (e.g. `PL`, `FR`, `German`) [default: `PL`] |
 | `-o`, `--output` | Base output file path |
 | `-f`, `--format` | Output format: `tmx`, `tsv`, `jsonl`, or `all` [default: `tmx`] |
-| `--batch` | Process all `.zip` archives in the `--input` directory sequentially |
+| `--batch` | Merge all `.zip` archives in `--input` into one unified output with global deduplication |
+| `--per-zip` | In `--batch` mode, write separate output files for each ZIP archive instead of merging |
 | `--output-dir` | Destination directory for batch mode |
-| `--split N` | Split output every `N` segments (e.g. `50000`) for CAT RAM protection |
+| `--split N` | Split output every `N` segments (e.g. `50000`, `100000`, `200000`, `300000`) for CAT RAM protection |
 | `--categories LIST` | Comma-separated domain filter: `legal,finance,trade,it_telecom,engineering,energy_env,medical,chemicals,agri_food,general` |
-| `--split-by-category` | Write separate output files per domain (`_legal`, `_finance`, `_trade`, etc.) |
+| `--split-by-category` | Write per-category subfolders (`legal/`, `finance/`, `trade/`, etc.) with domain-specific TMX files |
 | `--no-dedup` | Keep duplicate translation pairs |
 | `--no-filter-identical` | Keep segments where source and target text are identical |
 | `--download-repo` | Download the full DGT-TM dataset from `data.europa.eu` |
@@ -166,14 +170,14 @@ EU_TMX_Extractor/
 ├── LICENSE                 # MIT License
 ├── run_e2e_tests.py        # Automated E2E test runner
 └── tests/
-    └── test_e2e.py         # End-to-end test suite (24 tests)
+    └── test_e2e.py         # End-to-end test suite (25 tests)
 ```
 
 ---
 
 ## 🧪 Running Tests
 
-The project uses only Python's standard library and includes an automated end-to-end test suite (24 tests) covering TMX 1.4 XML validation, RAM-protection chunking, batch ZIP resilience, Windows/macOS/Linux console compatibility, repository downloads, and 10-category domain classification (including polysemy disambiguation, hyphenated compounds, multi-label routing, and `EN`-pivot vs. standalone non-`EN`/`PL` bilingual file handling):
+The project uses only Python's standard library and includes an automated end-to-end test suite (25 tests) covering TMX 1.4 XML validation, RAM-protection chunking, unified multi-ZIP batch merging with global cross-volume deduplication, per-category subfolders, `--per-zip` legacy mode, Windows/macOS/Linux console compatibility, repository downloads, and 10-category domain classification:
 
 ```bash
 python3 run_e2e_tests.py
