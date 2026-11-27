@@ -8,7 +8,7 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
 echo ======================================================================
-echo       EU TRANSLATION MEMORY EXTRACTOR (DGT-TM) v2.5
+echo       EU TRANSLATION MEMORY EXTRACTOR (DGT-TM) v2.6
 echo       Author: Michal Kornacki, PhD, University of Lodz - MIT License
 echo       ORCID:  https://orcid.org/0000-0002-0694-004X
 echo ======================================================================

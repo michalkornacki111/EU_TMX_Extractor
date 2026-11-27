@@ -33,7 +33,7 @@ Ready-to-use 1-click launchers are included. Simply **double-click the file for 
 
 ---
 
-## ✨ Features in Version 2.5
+## ✨ Features in Version 2.6
 
 ### 1. 🌐 Download the ENTIRE Official DGT-TM Repository (File by File)
 Instead of downloading individual volumes manually:
@@ -55,17 +55,17 @@ After downloads finish, the application asks:
 - **`[1] Proceed directly to TMX extraction (Batch mode across all files) [Recommended]`** – immediately configures your language pair (e.g. English ➔ Polish) and extracts all downloaded archives.
 - **`[2] Finish and exit here`** – cleanly saves all ZIP archives in your folder for future use.
 
-### 4. 🗂️ Sequential Batch Extraction from All ZIPs in a Folder
-If you have multiple ZIP files in your directory:
+### 4. 🗂️ Unified Multi-ZIP Batch Extraction (Merged Output + Global Deduplication)
+If you have multiple ZIP files in your directory (up to all 87 DGT-TM volumes):
 - Select option **`[W]`** in Step 1 of the wizard or run with `--batch`.
-- The program processes all archives one by one, creating individual `.tmx` files and reports, followed by a master summary report (`batch_summary_report_*.txt`).
-- Corrupted archives are safely skipped without halting the rest of the batch.
+- The wizard asks for **one destination folder and one base output filename** (e.g., `dgt_en_pl.tmx`), streaming all archives into a single unified output with **global 96-bit `blake2b` deduplication** across all volumes.
+- Instead of hundreds of fragmented per-ZIP files, you get clean domain subfolders (`legal/`, `finance/`, ...) chunked only when a category exceeds your chosen segment limit (`_part01.tmx`, `_part02.tmx`, ...).
+- Corrupted archives are safely skipped without halting the rest of the batch. *(Legacy per-ZIP output remains available in CLI via `--batch --per-zip`.)*
 
 ### 5. 🛡️ CAT Tool RAM Protection & File Chunking
 Huge translation memories (>100,000 segments) can freeze or crash SDL Trados Studio and memoQ.
-- The wizard allows splitting output into manageable chunks (default: **50,000 segments per file**).
-- Files are neatly numbered: `*_part01.tmx`, `*_part02.tmx`, etc.
-- Each chunk is a completely standalone, valid TMX 1.4 XML document.
+- Step 3 offers quick presets for **50,000**, **100,000**, **200,000**, or **300,000 segments per file**, plus a custom limit or no splitting.
+- Files are neatly numbered (`*_part01.tmx`, `*_part02.tmx`, ...), and each chunk is a standalone, valid TMX 1.4 XML document.
 
 ### 6. 🔄 Smooth Auto-Scrolling Terminal Interface
 - The interactive wizard clears the console at each step, displaying a prominent breadcrumb banner of your active choices at line 0.

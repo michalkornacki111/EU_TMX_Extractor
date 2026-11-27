@@ -558,9 +558,11 @@
         </p>
         <ul>
           <li><strong>[1] Split every 50,000 segments:</strong> Recommended for optimal CAT stability. Output is sequenced into <code>_part01.tmx</code>, <code>_part02.tmx</code>, etc.</li>
-          <li><strong>[2] Split every 100,000 segments:</strong> For high-end computers.</li>
-          <li><strong>[3] Custom segment limit:</strong> Enter any custom segment threshold.</li>
-          <li><strong>[4] No splitting:</strong> Generate a single large output file.</li>
+          <li><strong>[2] Split every 100,000 segments</strong></li>
+          <li><strong>[3] Split every 200,000 segments</strong></li>
+          <li><strong>[4] Split every 300,000 segments</strong></li>
+          <li><strong>[5] Custom segment limit:</strong> Enter any custom segment threshold.</li>
+          <li><strong>[6] No splitting:</strong> Generate a single large output file.</li>
         </ul>
       </div>
 
@@ -606,19 +608,19 @@
 
     <!-- SECTION 5: BATCH PROCESSING -->
     <section class="card" id="batch">
-      <h2>🗂️ 3. Batch Extraction: Process All ZIPs One by One</h2>
+      <h2>🗂️ 3. Unified Batch Extraction: Merge All ZIPs into Clean Domain Memories</h2>
       <p>
-        If your project requires processing multiple volumes (for instance, all 5 volumes of year 2025 or multiple historical years), 
-        the batch processing engine handles the entire list automatically in sequence:
+        If your project requires processing multiple volumes (for instance, all 87 DGT-TM volumes from 2004–2025), 
+        the unified batch engine merges them into one clean output using your chosen base filename:
       </p>
 
       <div class="step-box">
-        <h4>How Batch Mode Operates:</h4>
+        <h4>How Unified Batch Mode Operates:</h4>
         <ol>
-          <li>Detects all ZIP archives in the directory (e.g., <code>Vol_2024_1.zip</code>, <code>Vol_2024_2.zip</code>, <code>Vol_2025_1.zip</code>).</li>
-          <li>Processes each archive independently, creating dedicated output files (e.g., <code>Vol_2024_1_en_pl.tmx</code>) and individual reports.</li>
-          <li><strong>Fault-tolerant:</strong> If one archive is corrupted or incomplete, the program reports a warning and continues processing the remaining archives without crashing.</li>
-          <li>Generates a comprehensive <strong>Master Batch Report</strong> (<code>batch_summary_report_en_pl.txt</code>) summarizing total sentence pairs, elapsed time, and per-archive statistics.</li>
+          <li>Detects all ZIP archives in the directory (e.g., all 87 volumes in <code>TMX/</code>).</li>
+          <li>Asks for a single <strong>destination folder</strong> and <strong>base output filename</strong> (e.g., <code>dgt_en_pl.tmx</code>), applying <strong>global cross-volume deduplication</strong> across all years.</li>
+          <li>When domain splitting is enabled, creates clean <strong>per-category subfolders</strong> (<code>legal/</code>, <code>finance/</code>, <code>medical/</code>, ...) with chunked files (<code>_part01.tmx</code>, <code>_part02.tmx</code>, ...) only where needed — never 87×10 fragmented files!</li>
+          <li><strong>Fault-tolerant:</strong> If one archive is corrupted or incomplete, the program logs a warning and continues processing the remaining archives without crashing, writing a unified summary report (<code>*_report.txt</code>).</li>
         </ol>
       </div>
 
@@ -644,7 +646,7 @@
 
       <h3>Downloading the ENTIRE Official Repository (2004–2025)</h3>
       <p>
-        Version 2.5 allows you to download all 87 official volumes directly from within the program (allowing you to confirm or customize the destination folder, defaulting to <code>/TMX</code>):
+        Version 2.6 allows you to download all 87 official volumes directly from within the program (allowing you to confirm or customize the destination folder, defaulting to <code>/TMX</code>):
       </p>
       <ul>
         <li>Select option <strong><code>[W] DOWNLOAD ENTIRE REPOSITORY AT ONCE</code></strong> in the download menu.</li>
@@ -754,7 +756,7 @@
     <!-- FOOTER -->
     <footer>
       <p>
-        <strong>EU TMX Extractor v2.5</strong> • Developed by <strong>Michał Kornacki, PhD</strong>, University of Łódź (<a href="https://orcid.org/0000-0002-0694-004X" target="_blank" style="color: inherit;">ORCID: 0000-0002-0694-004X</a>, in Antigravity, 2026)<br>
+        <strong>EU TMX Extractor v2.6</strong> • Developed by <strong>Michał Kornacki, PhD</strong>, University of Łódź (<a href="https://orcid.org/0000-0002-0694-004X" target="_blank" style="color: inherit;">ORCID: 0000-0002-0694-004X</a>, in Antigravity, 2026)<br>
         Open Source under the <strong>MIT License</strong>.
       </p>
     </footer>

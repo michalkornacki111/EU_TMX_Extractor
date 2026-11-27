@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-EU TMX Extractor (DGT-TM / JRC-Acquis / Euramis) - Version 2.5
+EU TMX Extractor (DGT-TM / JRC-Acquis / Euramis) - Version 2.6
 =============================================================
 Author: Michał Kornacki, PhD, University of Łódź
 ORCID:  https://orcid.org/0000-0002-0694-004X
@@ -27,6 +27,7 @@ import math
 import time
 import glob
 import json
+import hashlib
 import zipfile
 import shutil
 import argparse
@@ -45,7 +46,7 @@ AUTHOR = "Michał Kornacki, PhD, University of Łódź"
 ORCID = "https://orcid.org/0000-0002-0694-004X"
 ENVIRONMENT = "Antigravity"
 YEAR = "2026"
-VERSION = "2.5"
+VERSION = "2.6"
 
 BASE_TOOLS_INFO = (
     "• TMXtract.jar – European Commission (DGT / JRC, 2013)\n"
@@ -561,21 +562,119 @@ class UI:
         ans = cls.prompt(f"{text} {choice_str}", default="y" if default else "n").lower()
         return ans in ("y", "yes", "t", "tak", "1", "true")
 
+    _SPINNER_FRAMES = ("|", "/", "-", "\\")
+    _spinner_idx = 0
+    _last_progress_len = 0
+
+    @staticmethod
+    def _format_eta(seconds: float) -> str:
+        """Formats remaining seconds into a compact human-readable string (e.g. 42s, 06m12s, 1h04m)."""
+        secs = max(0, int(seconds))
+        if secs < 60:
+            return f"{secs}s"
+        mins, rem_s = divmod(secs, 60)
+        if mins < 60:
+            return f"{mins:02d}m{rem_s:02d}s"
+        hrs, rem_m = divmod(mins, 60)
+        return f"{hrs}h{rem_m:02d}m"
+
     @classmethod
-    def render_progress(cls, current: int, total: int, pairs_count: int, speed: float = 0.0):
+    def clear_progress_line(cls):
+        """Clears any active single-line carriage-return progress bar cleanly."""
+        if sys.stdout.isatty() and cls._last_progress_len > 0:
+            sys.stdout.write("\r" + (" " * cls._last_progress_len) + "\r")
+            sys.stdout.flush()
+            cls._last_progress_len = 0
+
+    @classmethod
+    def _write_progress_line(cls, plain_line: str, colored_line: str, force_non_tty: bool = False):
+        """Writes a width-safe carriage-return progress line on TTY, or periodic newline on non-TTY."""
         if not sys.stdout.isatty():
+            if force_non_tty:
+                print(f" [PROGRESS] {plain_line}", flush=True)
             return
-        width = 25
-        pct = (current / total) if total > 0 else 1.0
+        cols = shutil.get_terminal_size((100, 24)).columns
+        max_len = max(40, cols - 1)
+        if len(plain_line) > max_len:
+            out = plain_line[: max_len - 1] + "~"
+            vis_len = len(out)
+        else:
+            out = colored_line
+            vis_len = len(plain_line)
+        pad = " " * max(0, cls._last_progress_len - vis_len)
+        sys.stdout.write(f"\r{out}{pad}")
+        sys.stdout.flush()
+        cls._last_progress_len = vis_len
+
+    @classmethod
+    def render_progress(
+        cls,
+        current: int,
+        total: int,
+        pairs_count: int,
+        speed: float = 0.0,
+        elapsed: float = 0.0,
+        force_non_tty: bool = False
+    ):
+        cls._spinner_idx = (cls._spinner_idx + 1) % len(cls._SPINNER_FRAMES)
+        spin = cls._SPINNER_FRAMES[cls._spinner_idx]
+        width = 20
+        pct = min(1.0, (current / total)) if total > 0 else 1.0
         filled = int(width * pct)
         bar = "=" * filled + "-" * (width - filled)
         pct_str = f"{int(pct * 100):3d}%"
-        speed_str = f" ({speed:,.0f} pairs/s)" if speed > 0 else ""
+        speed_str = f" | {speed:,.0f}/s" if speed > 0 else ""
+        eta_str = ""
+        if 0.005 <= pct < 1.0 and elapsed > 1.0:
+            eta_str = f" | ETA {cls._format_eta(elapsed * (1.0 - pct) / pct)}"
         pairs_fmt = f"{pairs_count:,}"
-        sys.stdout.write(
-            f"\r [{cls.c(bar, cls.CYAN)}] {pct_str} | File {current}/{total} | Extracted: {cls.c(pairs_fmt, cls.GREEN)} pairs{speed_str} "
+
+        plain = f" {spin} [{bar}] {pct_str} | File {current}/{total} | {pairs_fmt} pairs{speed_str}{eta_str}"
+        colored = (
+            f" {cls.c(spin, cls.YELLOW)} [{cls.c(bar, cls.CYAN)}] {pct_str}"
+            f" | File {current}/{total} | {cls.c(pairs_fmt, cls.GREEN)} pairs{speed_str}{eta_str}"
         )
-        sys.stdout.flush()
+        cls._write_progress_line(plain, colored, force_non_tty=force_non_tty)
+
+    @classmethod
+    def render_batch_progress(
+        cls,
+        z_idx: int,
+        total_zips: int,
+        zip_name: str,
+        file_idx: int,
+        total_files_in_zip: int,
+        total_pairs: int,
+        speed: float = 0.0,
+        elapsed: float = 0.0,
+        force_non_tty: bool = False
+    ):
+        cls._spinner_idx = (cls._spinner_idx + 1) % len(cls._SPINNER_FRAMES)
+        spin = cls._SPINNER_FRAMES[cls._spinner_idx]
+        width = 20
+        file_frac = (file_idx / total_files_in_zip) if total_files_in_zip > 0 else 0.0
+        overall_pct = min(1.0, ((z_idx - 1) + file_frac) / max(total_zips, 1))
+        filled = int(width * overall_pct)
+        bar = "=" * filled + "-" * (width - filled)
+        pct_str = f"{int(overall_pct * 100):3d}%"
+        speed_str = f" | {speed:,.0f}/s" if speed > 0 else ""
+        eta_str = ""
+        if 0.005 <= overall_pct < 1.0 and elapsed > 1.0:
+            eta_str = f" | ETA {cls._format_eta(elapsed * (1.0 - overall_pct) / overall_pct)}"
+        pairs_fmt = f"{total_pairs:,}"
+        short_zip = zip_name if len(zip_name) <= 20 else zip_name[:17] + "..."
+        file_part = f" {file_idx}/{total_files_in_zip}" if total_files_in_zip > 0 else ""
+
+        plain = (
+            f" {spin} [{bar}] {pct_str} | ZIP {z_idx}/{total_zips} ({short_zip}{file_part})"
+            f" | {pairs_fmt} pairs{speed_str}{eta_str}"
+        )
+        colored = (
+            f" {cls.c(spin, cls.YELLOW)} [{cls.c(bar, cls.CYAN)}] {pct_str}"
+            f" | ZIP {z_idx}/{total_zips} ({short_zip}{file_part})"
+            f" | {cls.c(pairs_fmt, cls.GREEN)} pairs{speed_str}{eta_str}"
+        )
+        cls._write_progress_line(plain, colored, force_non_tty=force_non_tty)
 
 
 # ==============================================================================
@@ -1107,7 +1206,16 @@ class TMXExtractor:
         self.identical_filtered = 0
         self.empty_filtered = 0
         self.pivot_en_found = 0
-        self.seen_hashes: Set[Tuple[str, str]] = set()
+        self.seen_hashes: Set[int] = set()
+
+    @staticmethod
+    def _pair_digest(src_seg: str, trg_seg: str) -> int:
+        """Computes a compact 96-bit blake2b integer digest for RAM-safe cross-volume deduplication."""
+        h = hashlib.blake2b(digest_size=12)
+        h.update(src_seg.encode("utf-8", errors="replace"))
+        h.update(b"\x00")
+        h.update(trg_seg.encode("utf-8", errors="replace"))
+        return int.from_bytes(h.digest(), "little")
 
     def matches_lang(self, tuv_lang: str, target_code: str) -> bool:
         clean = tuv_lang.strip().upper()
@@ -1166,7 +1274,7 @@ class TMXExtractor:
                         elif self.filter_identical and src_seg == trg_seg:
                             self.identical_filtered += 1
                         else:
-                            pair_key = (src_seg, trg_seg)
+                            pair_key = self._pair_digest(src_seg, trg_seg) if self.deduplicate else 0
                             if self.deduplicate and pair_key in self.seen_hashes:
                                 self.duplicates_removed += 1
                             else:
@@ -1232,7 +1340,7 @@ class TMXExtractor:
                         pivot_en_seg = s_val
 
                 if src_seg and trg_seg:
-                    pair_key = (src_seg, trg_seg)
+                    pair_key = self._pair_digest(src_seg, trg_seg) if self.deduplicate else 0
                     if self.deduplicate and pair_key in self.seen_hashes:
                         self.duplicates_removed += 1
                     else:
@@ -1457,9 +1565,9 @@ def _create_multi_writer(
 
 class CategoryRouterWriter:
     """
-    Lazily creates and routes segments to per-category MultiFormatWriter instances
-    (e.g., base_legal.tmx, base_business.tmx, ...), preventing empty files for
-    categories that have 0 matching segments.
+    Lazily creates per-category subfolders and routes segments to per-category
+    MultiFormatWriter instances (e.g., <out_dir>/legal/<base>_legal[_part01].tmx),
+    preventing empty folders or empty files for categories with 0 matching segments.
     """
     def __init__(
         self,
@@ -1479,7 +1587,11 @@ class CategoryRouterWriter:
     def write_for_category(self, category: str, pair: TranslationPair):
         mw = self.writers_by_cat.get(category)
         if mw is None:
-            cat_base = f"{self.base_out}_{category}"
+            out_dir = os.path.dirname(self.base_out) or "."
+            base_name = os.path.basename(self.base_out)
+            cat_dir = os.path.join(out_dir, category)
+            os.makedirs(cat_dir, exist_ok=True)
+            cat_base = os.path.join(cat_dir, f"{base_name}_{category}")
             mw = _create_multi_writer(cat_base, self.fmt_lower, self.source_lang, self.target_lang, self.split_size)
             self.writers_by_cat[category] = mw
         mw.write(pair)
@@ -2202,8 +2314,22 @@ def run_extraction(
                 "classification relies on embedded English (<tuv lang='EN'>) variants inside multilingual DGT-TM units."
             )
 
+    last_ui_ts = 0.0
+    last_non_tty_ts = time.monotonic()
+
     try:
         for idx, src_item in enumerate(sources, start=1):
+            if not quiet:
+                now_mono = time.monotonic()
+                if idx == 1 or (now_mono - last_ui_ts >= 0.2):
+                    elapsed = time.time() - t_start
+                    speed = (written_pairs / elapsed) if elapsed > 0 else 0
+                    non_tty_due = (now_mono - last_non_tty_ts >= 10.0)
+                    UI.render_progress(idx - 1, total_files, written_pairs, speed, elapsed=elapsed, force_non_tty=non_tty_due)
+                    last_ui_ts = now_mono
+                    if non_tty_due:
+                        last_non_tty_ts = now_mono
+
             z_ref, stream = src_item.open_stream()
             doc_key_fallback = src_item.display_name
             try:
@@ -2237,6 +2363,17 @@ def run_extraction(
                     if len(sample_preview) < 4:
                         sample_preview.append((pair.doc_id, pair.source, pair.target))
 
+                    if not quiet and (written_pairs & 255) == 0:
+                        now_mono = time.monotonic()
+                        if now_mono - last_ui_ts >= 0.2:
+                            elapsed = time.time() - t_start
+                            speed = (written_pairs / elapsed) if elapsed > 0 else 0
+                            non_tty_due = (now_mono - last_non_tty_ts >= 10.0)
+                            UI.render_progress(idx, total_files, written_pairs, speed, elapsed=elapsed, force_non_tty=non_tty_due)
+                            last_ui_ts = now_mono
+                            if non_tty_due:
+                                last_non_tty_ts = now_mono
+
                     if max_translations > 0 and written_pairs >= max_translations:
                         break
             finally:
@@ -2246,9 +2383,12 @@ def run_extraction(
                     z_ref.close()
 
             if not quiet:
-                elapsed = time.time() - t_start
-                speed = (written_pairs / elapsed) if elapsed > 0 else 0
-                UI.render_progress(idx, total_files, written_pairs, speed)
+                now_mono = time.monotonic()
+                if idx == total_files or (now_mono - last_ui_ts >= 0.2):
+                    elapsed = time.time() - t_start
+                    speed = (written_pairs / elapsed) if elapsed > 0 else 0
+                    UI.render_progress(idx, total_files, written_pairs, speed, elapsed=elapsed)
+                    last_ui_ts = now_mono
 
             if max_translations > 0 and written_pairs >= max_translations:
                 if not quiet:
@@ -2397,6 +2537,378 @@ def generate_master_batch_report(
         rf.write(report_text)
 
 
+def _run_merged_batch_extraction(
+    sorted_zips: List[str],
+    source_lang: str,
+    target_lang: str,
+    output_dir: str,
+    output_path: str = "",
+    output_format: str = "tmx",
+    deduplicate: bool = True,
+    filter_identical: bool = True,
+    max_translations: int = 0,
+    split_size: int = 0,
+    quiet: bool = False,
+    include_categories: Optional[Set[str]] = None,
+    split_by_category: bool = False
+) -> Dict:
+    """
+    Streams all provided ZIP archives sequentially into ONE unified output pipeline
+    (using a single user-chosen base filename, global 96-bit blake2b deduplication,
+    optional per-category subfolders, and CAT segment chunking _part01, _part02...).
+    Corrupted archives are skipped gracefully without halting the rest of the batch.
+    """
+    t_batch_start = time.time()
+    fmt_lower = output_format.lower()
+    default_ext = fmt_lower if fmt_lower != "all" else "tmx"
+
+    if output_path:
+        if os.path.isabs(output_path):
+            target_output_path = output_path
+            effective_out_dir = os.path.dirname(target_output_path) or output_dir or os.getcwd()
+        else:
+            effective_out_dir = output_dir or os.getcwd()
+            target_output_path = os.path.join(effective_out_dir, output_path)
+    else:
+        effective_out_dir = output_dir or os.getcwd()
+        target_output_path = os.path.join(
+            effective_out_dir, f"dgt_{source_lang.lower()}_{target_lang.lower()}.{default_ext}"
+        )
+
+    os.makedirs(effective_out_dir, exist_ok=True)
+    base_out = os.path.splitext(target_output_path)[0]
+
+    domain_active = bool(split_by_category or include_categories is not None)
+    classifier = DomainClassifier(use_doc_context=True) if domain_active else None
+    category_counts: Dict[str, int] = {cat: 0 for cat in DOMAIN_CATEGORIES}
+    filtered_by_category = 0
+    written_pairs = 0
+
+    if split_by_category:
+        active_writer: Union[CategoryRouterWriter, MultiFormatWriter] = CategoryRouterWriter(
+            base_out, fmt_lower, source_lang, target_lang, split_size=split_size
+        )
+    else:
+        active_writer = _create_multi_writer(
+            base_out, fmt_lower, source_lang, target_lang, split_size=split_size
+        )
+
+    extractor = TMXExtractor(
+        source_lang=source_lang,
+        target_lang=target_lang,
+        deduplicate=deduplicate,
+        filter_identical=filter_identical,
+        max_translations=max_translations,
+        capture_pivot_en=domain_active
+    )
+
+    needs_en_pivot = (
+        domain_active
+        and source_lang.upper() not in ("EN", "PL")
+        and target_lang.upper() not in ("EN", "PL")
+    )
+
+    results: List[Tuple[str, Dict]] = []
+    errors: List[Tuple[str, str]] = []
+    sample_preview: List[Tuple[str, str, str]] = []
+    total_files_processed = 0
+    limit_reached = False
+
+    if not quiet:
+        UI.header(f"STARTING UNIFIED BATCH EXTRACTION ({len(sorted_zips)} ZIP ARCHIVES)")
+        UI.info(f"Language pair:    {get_lang_display(source_lang)} -> {get_lang_display(target_lang)}")
+        UI.info(f"Output base file: {target_output_path}")
+        if split_size > 0:
+            UI.info(f"CAT splitting:    every {split_size:,} segments per file")
+        if domain_active:
+            inc_lbl = ", ".join(sorted(include_categories)) if include_categories else "all"
+            dom_mode = "split by category (per-category subfolders)" if split_by_category else "filter only"
+            UI.info(f"Domain routing:   {dom_mode} ({inc_lbl})")
+        if deduplicate:
+            UI.info("Deduplication:    GLOBAL across all ZIP archives (96-bit blake2b)")
+        if needs_en_pivot:
+            UI.info(
+                f"Language note:    Domain dictionaries use EN/PL. For {source_lang.upper()} -> {target_lang.upper()}, "
+                "classification uses embedded English (<tuv lang='EN'>) pivot variants inside DGT-TM units."
+            )
+        print()
+
+    last_ui_ts = 0.0
+    last_non_tty_ts = time.monotonic()
+
+    try:
+        for z_idx, z_path in enumerate(sorted_zips, 1):
+            if limit_reached:
+                break
+            z_name = os.path.basename(z_path)
+            t_zip_start = time.time()
+            zip_written = 0
+            zip_tus_before = extractor.total_tus_seen
+            zip_dups_before = extractor.duplicates_removed
+
+            try:
+                sources = discover_sources(z_path)
+                if not sources:
+                    raise ValueError(f"No valid .tmx files found inside archive: {z_name}")
+
+                total_in_zip = len(sources)
+                if not quiet:
+                    elapsed_total = time.time() - t_batch_start
+                    speed = (written_pairs / elapsed_total) if elapsed_total > 0 else 0
+                    UI.render_batch_progress(
+                        z_idx, len(sorted_zips), z_name, 0, total_in_zip,
+                        written_pairs, speed=speed, elapsed=elapsed_total
+                    )
+                    last_ui_ts = time.monotonic()
+
+                for file_idx, src_item in enumerate(sources, 1):
+                    if limit_reached:
+                        break
+                    z_ref, stream = src_item.open_stream()
+                    doc_key_fallback = src_item.display_name
+                    try:
+                        for pair in extractor.parse_stream(stream):
+                            if classifier is not None:
+                                matched_cats = classifier.classify_multi(
+                                    pair.source,
+                                    pair.target,
+                                    pivot_en_text=pair.pivot_en,
+                                    doc_key=pair.doc_id or doc_key_fallback
+                                )
+                                if include_categories is not None:
+                                    matched_cats = [c for c in matched_cats if c in include_categories]
+                                if not matched_cats:
+                                    filtered_by_category += 1
+                                    continue
+
+                                for c in matched_cats:
+                                    category_counts[c] = category_counts.get(c, 0) + 1
+
+                                if isinstance(active_writer, CategoryRouterWriter):
+                                    for c in matched_cats:
+                                        active_writer.write_for_category(c, pair)
+                                else:
+                                    active_writer.write(pair)
+                                written_pairs += 1
+                                zip_written += 1
+                            else:
+                                active_writer.write(pair)
+                                written_pairs += 1
+                                zip_written += 1
+
+                            if len(sample_preview) < 4:
+                                sample_preview.append((pair.doc_id, pair.source, pair.target))
+
+                            if not quiet and (written_pairs & 255) == 0:
+                                now_mono = time.monotonic()
+                                if now_mono - last_ui_ts >= 0.2:
+                                    elapsed_total = time.time() - t_batch_start
+                                    speed = (written_pairs / elapsed_total) if elapsed_total > 0 else 0
+                                    non_tty_due = (now_mono - last_non_tty_ts >= 10.0)
+                                    UI.render_batch_progress(
+                                        z_idx, len(sorted_zips), z_name, file_idx, total_in_zip,
+                                        written_pairs, speed=speed, elapsed=elapsed_total,
+                                        force_non_tty=non_tty_due
+                                    )
+                                    last_ui_ts = now_mono
+                                    if non_tty_due:
+                                        last_non_tty_ts = now_mono
+
+                            if max_translations > 0 and written_pairs >= max_translations:
+                                limit_reached = True
+                                break
+                    finally:
+                        if stream:
+                            stream.close()
+                        if z_ref:
+                            z_ref.close()
+                    total_files_processed += 1
+
+                    if not quiet:
+                        now_mono = time.monotonic()
+                        if now_mono - last_ui_ts >= 0.2:
+                            elapsed_total = time.time() - t_batch_start
+                            speed = (written_pairs / elapsed_total) if elapsed_total > 0 else 0
+                            non_tty_due = (now_mono - last_non_tty_ts >= 10.0)
+                            UI.render_batch_progress(
+                                z_idx, len(sorted_zips), z_name, file_idx, total_in_zip,
+                                written_pairs, speed=speed, elapsed=elapsed_total,
+                                force_non_tty=non_tty_due
+                            )
+                            last_ui_ts = now_mono
+                            if non_tty_due:
+                                last_non_tty_ts = now_mono
+
+                zip_elapsed = time.time() - t_zip_start
+                results.append((z_path, {
+                    "extracted_pairs": zip_written,
+                    "total_tus_seen": extractor.total_tus_seen - zip_tus_before,
+                    "duplicates_removed": extractor.duplicates_removed - zip_dups_before,
+                    "elapsed_seconds": zip_elapsed,
+                    "files_processed": len(sources),
+                    "output_parts": [],
+                }))
+                if not quiet:
+                    UI.clear_progress_line()
+                    elapsed_total = time.time() - t_batch_start
+                    speed = (written_pairs / elapsed_total) if elapsed_total > 0 else 0
+                    print(
+                        f" [{z_idx:>2}/{len(sorted_zips)}] {z_name:<26} | "
+                        f"+{zip_written:>8,} pairs | Total: {written_pairs:>10,} ({speed:,.0f} pairs/s)"
+                    )
+            except Exception as e:
+                errors.append((z_path, str(e)))
+                if not quiet:
+                    UI.clear_progress_line()
+                    UI.error(f"[{z_idx}/{len(sorted_zips)}] Skipped {z_name}: {e}")
+    finally:
+        if not quiet:
+            UI.clear_progress_line()
+        active_writer.close()
+
+    total_batch_time = time.time() - t_batch_start
+    all_output_parts = active_writer.get_all_parts()
+
+    domain_lang_warning = ""
+    if needs_en_pivot and (written_pairs + filtered_by_category) > 0 and extractor.pivot_en_found == 0:
+        domain_lang_warning = (
+            f"No English (EN) pivot segments were found in the input TMX for {source_lang.upper()} -> {target_lang.upper()}. "
+            "Domain categorization uses EN/PL dictionaries and therefore cannot classify standalone bilingual TMX files lacking EN or PL."
+        )
+        if not quiet:
+            UI.warning(domain_lang_warning)
+
+    domain_mode_label = ""
+    if split_by_category and include_categories is not None:
+        domain_mode_label = "filter + split (per-category subfolders)"
+    elif split_by_category:
+        domain_mode_label = "split by category (per-category subfolders)"
+    elif include_categories is not None:
+        domain_mode_label = "filter only"
+
+    report_path_en = f"{base_out}_report.txt"
+    report_path_pl = f"{base_out}_raport.txt"
+
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    dup_removed = extractor.duplicates_removed
+    dup_pct = (dup_removed / (written_pairs + dup_removed) * 100) if (written_pairs + dup_removed) > 0 else 0.0
+
+    rep_lines = [
+        "=" * 80,
+        "     EU TRANSLATION MEMORY (DGT-TM) UNIFIED BATCH EXPORT REPORT",
+        "=" * 80,
+        "",
+        "1. GENERAL METADATA:",
+        f"   * Generation timestamp:           {now_str}",
+        f"   * Tool:                           EU TMX Extractor v{VERSION}",
+        f"   * Author:                         {AUTHOR} (in {ENVIRONMENT}, {YEAR})",
+        f"   * ORCID:                          {ORCID}",
+        f"   * Language Pair:                  {get_lang_display(source_lang)} -> {get_lang_display(target_lang)}",
+        f"   * Mode:                           UNIFIED / MERGED BATCH ({len(sorted_zips)} ZIP archives)",
+        f"   * Successfully processed ZIPs:    {len(results)} / {len(sorted_zips)}",
+        f"   * Skipped / corrupted ZIPs:       {len(errors)}",
+        f"   * Internal TMX files scanned:     {total_files_processed:,}",
+        f"   * Total Elapsed Time:             {total_batch_time:.2f} s",
+        "",
+        "2. GLOBAL EXTRACTION & DEDUPLICATION STATISTICS:",
+        f"   * Total TU units scanned:         {extractor.total_tus_seen:,}",
+        f"   * Unique pairs extracted:         {written_pairs:,}",
+        f"   * Global duplicates removed:      {dup_removed:,} ({dup_pct:.1f}%)",
+        f"   * Identical segments filtered:    {extractor.identical_filtered:,}",
+        f"   * Empty segments filtered:        {extractor.empty_filtered:,}",
+    ]
+    if domain_active:
+        inc_str = ", ".join(sorted(include_categories)) if include_categories else "all"
+        rep_lines.append(f"   * Domain Classification Mode:     {domain_mode_label} (multi-label, filter: {inc_str})")
+        rep_lines.append(f"   * Filtered Out by Domain:         {filtered_by_category:,}")
+        breakdown = ", ".join(f"{cat}: {category_counts.get(cat, 0):,}" for cat in DOMAIN_CATEGORIES if category_counts.get(cat, 0) > 0)
+        if breakdown:
+            rep_lines.append(f"   * Domain Category Breakdown:      {breakdown}")
+        if domain_lang_warning:
+            rep_lines.append(f"   * Domain Language Limitation:     {domain_lang_warning}")
+
+    rep_lines.extend([
+        "",
+        "3. GENERATED OUTPUT FILES:",
+        f"   * Chunking (RAM Protection):      {'YES (max ' + str(split_size) + ' segments per file)' if split_size > 0 else 'NO (single file per stream)'}",
+        f"   * Total Output Files Created:     {len(all_output_parts)}",
+    ])
+    for idx, p in enumerate(all_output_parts, 1):
+        mb = p.size_bytes / (1024 * 1024)
+        rel_p = os.path.relpath(p.file_path, effective_out_dir)
+        rep_lines.append(f"     [{idx}] {rel_p} (format: {p.format_name.upper()}, segments: {p.segments_count:,}, size: {mb:.2f} MB)")
+
+    rep_lines.extend(["", "4. PER-ARCHIVE PROCESSING SUMMARY:"])
+    for idx, (z_p, st) in enumerate(results, 1):
+        rep_lines.append(
+            f"   [{idx:>2}] {os.path.basename(z_p)}: +{st['extracted_pairs']:,} new unique pairs "
+            f"(dups skipped: {st['duplicates_removed']:,}, {st['elapsed_seconds']:.2f} s)"
+        )
+    if errors:
+        rep_lines.extend(["", "5. SKIPPED / CORRUPTED ARCHIVES:"])
+        for z_p, err_msg in errors:
+            rep_lines.append(f"   [!] {os.path.basename(z_p)}: {err_msg}")
+
+    rep_lines.extend([
+        "",
+        "=" * 80,
+        " Generated TMX files are 100% compliant with the TMX 1.4 standard.",
+        " You can import them directly into SDL Trados Studio, memoQ, OmegaT.",
+        "=" * 80,
+    ])
+    with open(report_path_en, "w", encoding="utf-8") as rf:
+        rf.write("\n".join(rep_lines))
+    try:
+        shutil.copyfile(report_path_en, report_path_pl)
+    except Exception:
+        pass
+
+    if not quiet:
+        UI.header("UNIFIED BATCH EXTRACTION COMPLETED (SUMMARY)")
+        UI.success(f"Processed {len(results)}/{len(sorted_zips)} ZIP archives successfully.")
+        if errors:
+            UI.warning(f"Archives skipped due to errors: {len(errors)}")
+        UI.success(f"Total unique pairs extracted: {written_pairs:,}")
+        if deduplicate:
+            UI.info(f"Global duplicates removed:    {dup_removed:,} ({dup_pct:.1f}%)")
+        if domain_active:
+            cat_str = ", ".join(f"{c}: {category_counts.get(c, 0):,}" for c in DOMAIN_CATEGORIES if category_counts.get(c, 0) > 0)
+            if cat_str:
+                UI.info(f"Domain breakdown:             {cat_str}")
+        UI.info(f"Total elapsed time:           {total_batch_time:.2f} s")
+        UI.info(f"Summary report saved to:      {report_path_en}")
+        print("\n" + UI.c(f"Created Translation Memory files ({len(all_output_parts)} files):", UI.BOLD))
+        for p in all_output_parts[:25]:
+            mb = p.size_bytes / (1024 * 1024)
+            rel_p = os.path.relpath(p.file_path, effective_out_dir)
+            print(f"  * {rel_p} ({p.segments_count:,} segments, {mb:.2f} MB)")
+        if len(all_output_parts) > 25:
+            print(f"  ... and {len(all_output_parts) - 25} more files (see full list in {os.path.basename(report_path_en)})")
+        print()
+
+    return {
+        "total_zips": len(sorted_zips),
+        "successful_zips": len(results),
+        "failed_zips": len(errors),
+        "total_pairs": written_pairs,
+        "extracted_pairs": written_pairs,
+        "duplicates_removed": dup_removed,
+        "total_elapsed": total_batch_time,
+        "results": results,
+        "errors": errors,
+        "report_path": report_path_en,
+        "master_report_path": report_path_en,
+        "all_output_parts": all_output_parts,
+        "output_parts": all_output_parts,
+        "output_files": [p.file_path for p in all_output_parts],
+        "category_counts": category_counts if domain_active else {},
+        "filtered_by_category": filtered_by_category,
+        "pivot_en_found": extractor.pivot_en_found,
+        "domain_lang_warning": domain_lang_warning,
+        "merged": True,
+    }
+
+
 def run_batch_extraction(
     zip_paths: List[str],
     source_lang: str,
@@ -2409,12 +2921,38 @@ def run_batch_extraction(
     split_size: int = 0,
     quiet: bool = False,
     include_categories: Optional[Set[str]] = None,
-    split_by_category: bool = False
+    split_by_category: bool = False,
+    output_path: str = "",
+    merge_output: bool = True
 ) -> Dict:
-    """Extracts TMX from all provided ZIP archives one by one (batch mode)."""
+    """
+    Extracts TMX from all provided ZIP archives in batch mode.
+    By default (merge_output=True), streams all archives into one unified output
+    using a single base filename, global cross-ZIP deduplication, per-category
+    subfolders, and CAT chunking (_part01, _part02...).
+    Set merge_output=False (--per-zip) for legacy per-archive output files.
+    """
+    sorted_zips = sorted(zip_paths, key=lambda p: os.path.basename(p).lower())
+
+    if merge_output:
+        return _run_merged_batch_extraction(
+            sorted_zips=sorted_zips,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            output_dir=output_dir,
+            output_path=output_path,
+            output_format=output_format,
+            deduplicate=deduplicate,
+            filter_identical=filter_identical,
+            max_translations=max_translations,
+            split_size=split_size,
+            quiet=quiet,
+            include_categories=include_categories,
+            split_by_category=split_by_category
+        )
+
     t_batch_start = time.time()
     os.makedirs(output_dir, exist_ok=True)
-    sorted_zips = sorted(zip_paths, key=lambda p: os.path.basename(p).lower())
 
     results: List[Tuple[str, Dict]] = []
     errors: List[Tuple[str, str]] = []
@@ -2540,12 +3078,12 @@ def _prompt_domain_options_wizard(src_lang: str = "EN", trg_lang: str = "PL") ->
             UI.YELLOW + UI.BOLD
         ))
     print(f" [{UI.c('1', UI.CYAN)}] No domain splitting – keep all segments together [Default]")
-    print(f" [{UI.c('2', UI.CYAN)}] Split output into separate files by domain (_legal, _finance, _trade, _it_telecom, _engineering, _energy_env, _medical, _chemicals, _agri_food, _general)")
+    print(f" [{UI.c('2', UI.CYAN)}] Split output into per-category subfolders (legal/, finance/, trade/, it_telecom/, engineering/, energy_env/, medical/, chemicals/, agri_food/, general/)")
     print(f" [{UI.c('3', UI.CYAN)}] Filter only selected domain categories")
 
     d_choice = UI.prompt("Select domain option", default="1").strip()
     if d_choice == "2":
-        return None, True, "Split into separate files by category (10 domains, multi-label)"
+        return None, True, "Split into per-category subfolders (10 domains, multi-label)"
     elif d_choice == "3":
         print(UI.c(" Available categories:", UI.BOLD))
         for c_code in DOMAIN_CATEGORIES:
@@ -2736,9 +3274,11 @@ def run_interactive_wizard():
     print(UI.c(" Very large TMX files (>100k segments) can crash or freeze Trados or memoQ.", UI.DIM))
     print(UI.c(" Splitting into smaller parts (_part01, _part02...) ensures fast, stable imports.", UI.DIM))
     print(f" [{UI.c('1', UI.CYAN)}] Split every 50,000 segments [Recommended: Trados, memoQ, OmegaT]")
-    print(f" [{UI.c('2', UI.CYAN)}] Split every 100,000 segments (for higher-end PCs)")
-    print(f" [{UI.c('3', UI.CYAN)}] Enter custom segment limit per file")
-    print(f" [{UI.c('4', UI.CYAN)}] No splitting – save everything into a single large file")
+    print(f" [{UI.c('2', UI.CYAN)}] Split every 100,000 segments")
+    print(f" [{UI.c('3', UI.CYAN)}] Split every 200,000 segments")
+    print(f" [{UI.c('4', UI.CYAN)}] Split every 300,000 segments")
+    print(f" [{UI.c('5', UI.CYAN)}] Enter custom segment limit per file")
+    print(f" [{UI.c('6', UI.CYAN)}] No splitting – save everything into a single large file")
 
     split_choice = UI.prompt("\nSelect splitting option", default="1")
     split_size = 50000
@@ -2747,16 +3287,20 @@ def run_interactive_wizard():
     elif split_choice == "2":
         split_size = 100000
     elif split_choice == "3":
-        custom_limit = UI.prompt("Enter segment limit per file (e.g. 30000)", default="50000")
-        split_size = int(custom_limit) if custom_limit.isdigit() else 50000
+        split_size = 200000
     elif split_choice == "4":
+        split_size = 300000
+    elif split_choice == "5":
+        custom_limit = UI.prompt("Enter segment limit per file (e.g. 75000)", default="50000")
+        split_size = int(custom_limit) if custom_limit.isdigit() else 50000
+    elif split_choice == "6":
         split_size = 0
 
     split_desc = f"{split_size:,} segments/file" if split_size > 0 else "Single file (no split)"
 
     # --- STEP 4: OUTPUT FORMAT AND DIRECTORY (BATCH VS SINGLE) ---
     if selected_type == "batch":
-        UI.step_banner(4, 5, "Output Format and Destination Directory (Batch Mode)", [f"Source: {display_source}", f"Pair: {src_lang}->{trg_lang}", f"Splitting: {split_desc}"])
+        UI.step_banner(4, 5, "Output Format, Folder & Unified Filename (Batch Mode)", [f"Source: {display_source}", f"Pair: {src_lang}->{trg_lang}", f"Splitting: {split_desc}"])
         print(f" [{UI.c('1', UI.CYAN)}] TMX (.tmx) – Standard Translation Memory (Trados, memoQ, OmegaT) [Recommended]")
         print(f" [{UI.c('2', UI.CYAN)}] Excel / TSV (.tsv) – Spreadsheet for immediate reading")
         print(f" [{UI.c('3', UI.CYAN)}] TMX + Excel/TSV (Both formats simultaneously)")
@@ -2767,34 +3311,42 @@ def run_interactive_wizard():
         format_map = {"1": "tmx", "2": "tsv", "3": "all", "4": "jsonl", "5": "all"}
         out_format = format_map.get(f_choice, "tmx")
 
-        print(UI.c("\nIn batch mode, each ZIP archive produces its own translation memory file:", UI.DIM))
-        print(UI.c("e.g. Vol_2025.new_1.zip -> Vol_2025.new_1_en_pl.tmx (and text report)", UI.DIM))
+        print(UI.c("\nAll selected ZIP archives will be merged into one unified output using your chosen base name", UI.DIM))
+        print(UI.c("(with per-category subfolders and _part01, _part02... chunks if splitting is enabled).", UI.DIM))
         out_folder = UI.prompt("Destination folder for output files", default=out_dir)
         os.makedirs(out_folder, exist_ok=True)
+        default_ext = out_format if out_format != "all" else "tmx"
+        default_batch_name = f"dgt_{src_lang.lower()}_{trg_lang.lower()}.{default_ext}"
+        out_name = UI.prompt("Base output filename", default=default_batch_name)
+        if os.path.isabs(out_name):
+            out_path = out_name
+            out_folder = os.path.dirname(out_path) or out_folder
+        else:
+            out_path = os.path.join(out_folder, out_name)
 
         UI.step_banner(5, 5, "Data Quality and Filtering Options for Batch", [f"Source: {display_source}", f"Pair: {src_lang}->{trg_lang}", f"Format: {out_format.upper()}"])
-        do_dedup = UI.prompt_yes_no("Remove duplicates (deduplicate identical translation pairs in each file)?", default=True)
+        do_dedup = UI.prompt_yes_no("Remove duplicates (global deduplication across all ZIP archives)?", default=True)
         filter_ident = UI.prompt_yes_no("Filter out identical segments (e.g. exact same numbers/codes in both languages)?", default=True)
-        limit_ans = UI.prompt("Maximum translation pairs per archive [Enter = NO LIMIT]", default="")
+        limit_ans = UI.prompt("Maximum total translation pairs across all archives [Enter = NO LIMIT]", default="")
         max_count = int(limit_ans) if limit_ans.isdigit() else 0
         inc_cats, split_by_cat, dom_summary = _prompt_domain_options_wizard(src_lang, trg_lang)
 
         print()
-        UI.header("BATCH EXTRACTION JOB SUMMARY")
-        print(f"  * Total ZIP archives:  {UI.c(str(len(selected_val)), UI.BOLD)} files")
+        UI.header("UNIFIED BATCH EXTRACTION JOB SUMMARY")
+        print(f"  * Total ZIP archives:  {UI.c(str(len(selected_val)), UI.BOLD)} files (merged into unified output)")
         for z_i, z_p in enumerate(selected_val[:5], 1):
             print(f"    [{z_i}] {os.path.basename(z_p)}")
         if len(selected_val) > 5:
             print(f"    ... and {len(selected_val) - 5} more")
         print(f"  * Language pair:       {UI.c(get_lang_display(src_lang), UI.GREEN)} -> {UI.c(get_lang_display(trg_lang), UI.GREEN)}")
         print(f"  * Output format:       {UI.c(out_format.upper(), UI.CYAN)}")
-        print(f"  * Destination folder:  {UI.c(out_folder, UI.BOLD)}")
+        print(f"  * Output base file:    {UI.c(out_path, UI.BOLD)}")
         print(f"  * Chunking for CAT:    {UI.c(f'YES (every {split_size:,} segments)' if split_size > 0 else 'NO (single file)', UI.YELLOW)}")
-        print(f"  * Deduplication:       {'YES (clean unique memory)' if do_dedup else 'NO'}")
+        print(f"  * Deduplication:       {'YES (global cross-volume)' if do_dedup else 'NO'}")
         print(f"  * Domain routing:      {dom_summary}")
         print()
 
-        if not UI.prompt_yes_no("Do you want to start batch extraction across all archives now?", default=True):
+        if not UI.prompt_yes_no("Do you want to start unified batch extraction across all archives now?", default=True):
             print("Cancelled by user.")
             return
 
@@ -2804,6 +3356,7 @@ def run_interactive_wizard():
             source_lang=src_lang,
             target_lang=trg_lang,
             output_dir=out_folder,
+            output_path=out_path,
             output_format=out_format,
             deduplicate=do_dedup,
             filter_identical=filter_ident,
@@ -2811,7 +3364,8 @@ def run_interactive_wizard():
             split_size=split_size,
             quiet=False,
             include_categories=inc_cats,
-            split_by_category=split_by_cat
+            split_by_category=split_by_cat,
+            merge_output=True
         )
         UI.prompt("Press Enter to exit the program", default="")
         return
@@ -2929,8 +3483,8 @@ def main():
   3. Split output into 10 specialized translation domains (multi-label):
      python3 tmx_extractor.py -i Vol_2025.new_1.zip -s EN -t PL -o eu_mem.tmx --split-by-category
 
-  4. Extract all ZIP archives in a folder one by one (batch mode):
-     python3 tmx_extractor.py -i ./TMX --batch -s EN -t PL --output-dir ./results
+  4. Merge all ZIP archives in a folder into unified category subfolders & 100k chunks:
+     python3 tmx_extractor.py -i ./TMX --batch -s EN -t PL -o eu_dgt_en_pl.tmx --output-dir ./results --split-by-category --split 100000
 
   5. Download entire DGT-TM repository (all 87 volumes, 2004-2025, file by file):
      python3 tmx_extractor.py --download-repo --dest-dir ./TMX
@@ -2944,9 +3498,10 @@ def main():
     parser.add_argument("-t", "--target-lang", default="PL", help="Target language code (e.g. PL, EN, DE, ES) [default: PL]")
     parser.add_argument("-o", "--output", default="", help="Output base filename (.tmx, .tsv, .jsonl)")
     parser.add_argument("-f", "--format", choices=["tmx", "tsv", "jsonl", "all"], default="tmx", help="Output format [default: tmx]")
-    parser.add_argument("--batch", action="store_true", help="Batch process all ZIP archives found in --input directory")
+    parser.add_argument("--batch", action="store_true", help="Batch process all ZIP archives in --input into one unified output (use --per-zip for separate files per archive)")
+    parser.add_argument("--per-zip", action="store_true", help="In --batch mode, create separate output files for each ZIP archive instead of merging")
     parser.add_argument("--output-dir", default="", help="Output directory for batch processing")
-    parser.add_argument("--split", type=int, default=0, help="Split output into files of N segments each (e.g. 50000) [0 = no split]")
+    parser.add_argument("--split", type=int, default=0, help="Split output into files of N segments each (e.g. 50000, 100000, 200000, 300000) [0 = no split]")
     parser.add_argument(
         "--categories",
         default="",
@@ -3017,6 +3572,7 @@ def main():
             source_lang=src,
             target_lang=trg,
             output_dir=target_out_dir,
+            output_path=args.output,
             output_format=args.format,
             deduplicate=not args.no_dedup,
             filter_identical=not args.no_filter_identical,
@@ -3024,7 +3580,8 @@ def main():
             split_size=args.split,
             quiet=args.quiet,
             include_categories=inc_cats,
-            split_by_category=args.split_by_category
+            split_by_category=args.split_by_category,
+            merge_output=not args.per_zip
         )
         return
 
