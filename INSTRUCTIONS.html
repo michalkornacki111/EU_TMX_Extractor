@@ -580,7 +580,19 @@
           <li><strong>Deduplication [Y/n]:</strong> Removes redundant repetitions, keeping only unique sentence pairs.</li>
           <li><strong>Identical Segment Filter [Y/n]:</strong> Filters out non-translatable units where source and target are identical (e.g. pure digits, article numbering).</li>
           <li><strong>Max pairs limit:</strong> Leave blank for no limit, or specify a test limit (e.g. 1000).</li>
-          <li><strong>Domain Categorization (Optional):</strong> Choose whether to keep all segments together <code>[1 - Default]</code>, automatically split output into separate domain files (<code>_legal</code>, <code>_business</code>, <code>_environment</code>, <code>_tech</code>, <code>_medical</code>, <code>_general</code>) <code>[2]</code>, or filter only selected categories <code>[3]</code>.<br>
+          <li><strong>Domain Categorization (10 Market-Aligned Categories, Optional):</strong> Choose whether to keep all segments together <code>[1 - Default]</code>, automatically split output into separate domain files <code>[2]</code>, or filter only selected categories <code>[3]</code>:
+            <ul style="margin: 8px 0 8px 18px;">
+              <li><code>legal</code> – Law, Judiciary, EU Legislation &amp; Treaties</li>
+              <li><code>finance</code> – Finance, Banking (CRR/ECB), Accounting (IFRS) &amp; Tax</li>
+              <li><code>trade</code> – International Trade, Customs, Procurement, Competition &amp; Business</li>
+              <li><code>it_telecom</code> – IT, Software, Cybersecurity (NIS2), AI &amp; Telecommunications</li>
+              <li><code>engineering</code> – Engineering, Automotive, Transport, Aviation &amp; Machinery</li>
+              <li><code>energy_env</code> – Energy, Climate, Emissions (EU ETS), Waste &amp; Environment</li>
+              <li><code>medical</code> – Medicine, Pharmaceuticals, Medical Devices &amp; Veterinary</li>
+              <li><code>chemicals</code> – Chemicals, REACH/CLP, Safety Data Sheets (SDS) &amp; Biocides</li>
+              <li><code>agri_food</code> – Agriculture, Food Safety (EFSA), Animal Feed &amp; Fisheries</li>
+              <li><code>general</code> – General, Administrative &amp; Unclassified (fallback)</li>
+            </ul>
           <em>Note: Domain filtering is automated (machine-based) and is not 100% accurate. If a segment matches two or more categories, it is placed in all matching files.</em></li>
         </ul>
       </div>
@@ -625,14 +637,13 @@
 
       <div class="alert alert-success">
         <strong>📂 WHERE SHOULD YOU SAVE DOWNLOADED ZIP FILES?</strong><br>
-        Save downloaded <code>.zip</code> files <strong>directly inside the folder of this program</strong> 
-        (the folder containing <code>run_windows.bat</code> and <code>tmx_extractor.py</code>).<br>
-        The program automatically scans its own folder at startup and displays all detected archives in the Step 1 menu!
+        Save downloaded <code>.zip</code> files into the dedicated <code>TMX</code> folder (default download destination) or directly inside the folder of this program.<br>
+        The program automatically scans both the <code>TMX</code> folder and its own folder at startup and displays all detected archives in the Step 1 menu!
       </div>
 
       <h3>Downloading the ENTIRE Official Repository (2004–2025)</h3>
       <p>
-        Version 2.4 allows you to download all 87 official volumes directly from within the program:
+        Version 2.5 allows you to download all 87 official volumes directly from within the program (allowing you to confirm or customize the destination folder, defaulting to <code>/TMX</code>):
       </p>
       <ul>
         <li>Select option <strong><code>[W] DOWNLOAD ENTIRE REPOSITORY AT ONCE</code></strong> in the download menu.</li>
@@ -730,7 +741,7 @@
     <!-- FOOTER -->
     <footer>
       <p>
-        <strong>EU TMX Extractor v2.4</strong> • Developed by <strong>Michał Kornacki</strong> (in Antigravity, 2026)<br>
+        <strong>EU TMX Extractor v2.5</strong> • Developed by <strong>Michał Kornacki</strong> (in Antigravity, 2026)<br>
         Open Source under the <strong>MIT License</strong>.
       </p>
     </footer>

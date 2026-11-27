@@ -1,7 +1,7 @@
 # EU Translation Memory Extractor (DGT-TM / Euramis) 🇪🇺
 
 > **Author:** Michał Kornacki (in Antigravity, 2026)  
-> **License:** MIT License (2026) – full text in the [`LICENSE`](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/LICENSE) file or enter `L` in the application  
+> **License:** MIT License (2026) – full text in the [`LICENSE`](file:///home/michal/Data/TMX%20Extract/---%20APP%20---/LICENSE) file or enter `L` in the application  
 > **Base Tools:** Developed based on:
 > - `TMXtract.jar` – official tool from the Directorate-General for Translation (DGT) / Joint Research Centre (JRC) of the **European Commission** (2013)
 > - `tmxtract` – open-source project by **Rodrigo Nepomuceno** (2019, MIT, https://github.com/Nepomuceno/tmxtract)
@@ -16,8 +16,8 @@ This program is 100% free and open-source under the **MIT License**:
 * View the full license inside the application:
   * In the interactive wizard: choose option **`[L]`**
   * From the command line: run `python3 tmx_extractor.py --license`
-  * Text file: [**`LICENSE`**](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/LICENSE)
-  * Visual interactive manual: [**`INSTRUCTIONS.html`**](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/INSTRUCTIONS.html)
+  * Text file: [**`LICENSE`**](file:///home/michal/Data/TMX%20Extract/---%20APP%20---/LICENSE)
+  * Visual interactive manual: [**`INSTRUCTIONS.html`**](file:///home/michal/Data/TMX%20Extract/---%20APP%20---/INSTRUCTIONS.html)
 
 ---
 
@@ -25,15 +25,15 @@ This program is 100% free and open-source under the **MIT License**:
 
 Ready-to-use 1-click launchers are included. Simply **double-click the file for your operating system**:
 
-* **Windows**: Double-click [`run_windows.bat`](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/run_windows.bat)
-* **Mac (macOS)**: Double-click [`run_mac.command`](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/run_mac.command)
-* **Linux**: Double-click [`run_linux.sh`](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/run_linux.sh) *(or run `python3 tmx_extractor.py` in terminal)*
+* **Windows**: Double-click [`run_windows.bat`](file:///home/michal/Data/TMX%20Extract/---%20APP%20---/run_windows.bat)
+* **Mac (macOS)**: Double-click [`run_mac.command`](file:///home/michal/Data/TMX%20Extract/---%20APP%20---/run_mac.command)
+* **Linux**: Double-click [`run_linux.sh`](file:///home/michal/Data/TMX%20Extract/---%20APP%20---/run_linux.sh) *(or run `python3 tmx_extractor.py` in terminal)*
 
-> 📘 **Visual User Guide:** Open [**`INSTRUCTIONS.html`**](file:///home/michal/Data/TMX%20Extract/EU_TMX_Extractor/INSTRUCTIONS.html) in your browser for a visual step-by-step installation guide and CAT import instructions for SDL Trados Studio, memoQ, and OmegaT.
+> 📘 **Visual User Guide:** Open [**`INSTRUCTIONS.html`**](file:///home/michal/Data/TMX%20Extract/---%20APP%20---/INSTRUCTIONS.html) in your browser for a visual step-by-step installation guide and CAT import instructions for SDL Trados Studio, memoQ, and OmegaT.
 
 ---
 
-## ✨ Features in Version 2.4
+## ✨ Features in Version 2.5
 
 ### 1. 🌐 Download the ENTIRE Official DGT-TM Repository (File by File)
 Instead of downloading individual volumes manually:
@@ -71,9 +71,19 @@ Huge translation memories (>100,000 segments) can freeze or crash SDL Trados Stu
 - The interactive wizard clears the console at each step, displaying a prominent breadcrumb banner of your active choices at line 0.
 - Before each prompt, the console viewport is scrolled down to ensure the prompt is never hidden below the fold in Windows CMD/conhost or long terminal buffers.
 
-### 7. 🏷️ Domain Categorization & Splitting (`legal`, `business`, `environment`, `tech`, `medical`, `general`)
-- Filter segments or automatically split extraction into separate domain-specific TMX files (`*_legal.tmx`, `*_business.tmx`, `*_environment.tmx`, `*_tech.tmx`, `*_medical.tmx`, `*_general.tmx`).
-- Uses a zero-dependency multi-label classifier with document-title context boosting (Step 5 in the wizard or `--categories` / `--split-by-category` in CLI).
+### 7. 🏷️ 10-Category Domain Classification & Splitting
+- Filter segments or automatically split extraction into **10 translation-market verticals**:
+  - `legal` – Law, Judiciary, EU Legislation & Treaties
+  - `finance` – Finance, Banking (CRR/ECB), Accounting (IFRS) & Tax
+  - `trade` – International Trade, Customs, Procurement, Competition & Business
+  - `it_telecom` – IT, Software, Cybersecurity (NIS2), AI & Telecommunications
+  - `engineering` – Engineering, Automotive, Transport, Aviation & Machinery
+  - `energy_env` – Energy, Climate, Emissions (EU ETS), Waste & Environment
+  - `medical` – Medicine, Pharmaceuticals, Medical Devices & Veterinary
+  - `chemicals` – Chemicals, REACH/CLP, Safety Data Sheets (SDS) & Biocides
+  - `agri_food` – Agriculture, Food Safety (EFSA), Animal Feed & Fisheries
+  - `general` – General, Administrative & Unclassified (fallback)
+- Uses a zero-dependency two-stage multi-label classifier combining tiered collocation rules, TF-IDF/bigram similarity, and dominant-only document-title context priors (Step 5 in the wizard or `--categories` / `--split-by-category` in CLI).
 - **Note:** Domain filtering is automated (machine-based) and is not 100% accurate. If a segment matches two or more categories, it is placed in all matching files.
 
 ---
@@ -85,19 +95,19 @@ Huge translation memories (>100,000 segments) can freeze or crash SDL Trados Stu
 python3 tmx_extractor.py
 
 # Single archive extraction with 50,000 segment chunking
-python3 tmx_extractor.py -i Vol_2009_4.zip -s EN -t PL -o memory_en_pl.tmx --split 50000
+python3 tmx_extractor.py -i Vol_2025.new_1.zip -s EN -t PL -o memory_en_pl.tmx --split 50000
 
-# Split output into separate TMX files by domain category
-python3 tmx_extractor.py -i Vol_2009_4.zip -s EN -t PL -o memory_en_pl.tmx --split-by-category
+# Split output into separate TMX files across the 10 domain categories
+python3 tmx_extractor.py -i Vol_2025.new_1.zip -s EN -t PL -o memory_en_pl.tmx --split-by-category
 
-# Extract only legal and medical segments into separate files
-python3 tmx_extractor.py -i Vol_2009_4.zip -s EN -t PL -o memory_en_pl.tmx --categories legal,medical --split-by-category
+# Extract only legal, finance, and medical segments into separate files
+python3 tmx_extractor.py -i Vol_2025.new_1.zip -s EN -t PL -o memory_en_pl.tmx --categories legal,finance,medical --split-by-category
 
 # Batch extraction across all ZIP files in a folder
-python3 tmx_extractor.py -i ./zips --batch -s EN -t PL --output-dir ./results
+python3 tmx_extractor.py -i ../TMX --batch -s EN -t PL --output-dir ./results
 
 # Download entire DGT-TM repository from CLI
-python3 tmx_extractor.py --download-repo --dest-dir ./dgt_zips
+python3 tmx_extractor.py --download-repo --dest-dir ../TMX
 
 # View MIT license
 python3 tmx_extractor.py --license

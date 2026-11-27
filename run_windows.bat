@@ -8,7 +8,7 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
 echo ======================================================================
-echo       EU TRANSLATION MEMORY EXTRACTOR (DGT-TM) v2.4
+echo       EU TRANSLATION MEMORY EXTRACTOR (DGT-TM) v2.5
 echo       Author: Michal Kornacki (in Antigravity, 2026) - MIT License
 echo ======================================================================
 echo.

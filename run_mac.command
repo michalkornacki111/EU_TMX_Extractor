@@ -10,7 +10,7 @@ cd "$DIR"
 clear
 
 echo "======================================================================"
-echo "      EU TRANSLATION MEMORY EXTRACTOR (DGT-TM) v2.4"
+echo "      EU TRANSLATION MEMORY EXTRACTOR (DGT-TM) v2.5"
 echo "      Author: Michał Kornacki (in Antigravity, 2026) - MIT License"
 echo "======================================================================"
 echo ""

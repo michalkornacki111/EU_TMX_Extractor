@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-EU TMX Extractor (DGT-TM / JRC-Acquis / Euramis) - Version 2.4
+EU TMX Extractor (DGT-TM / JRC-Acquis / Euramis) - Version 2.5
 =============================================================
 Author: Michał Kornacki (in Antigravity, 2026)
 License: MIT License
@@ -42,7 +42,7 @@ import xml.etree.ElementTree as ET
 AUTHOR = "Michał Kornacki"
 ENVIRONMENT = "Antigravity"
 YEAR = "2026"
-VERSION = "2.4"
+VERSION = "2.5"
 
 BASE_TOOLS_INFO = (
     "• TMXtract.jar – European Commission (DGT / JRC, 2013)\n"
@@ -661,98 +661,200 @@ class TranslationPair:
         self.pivot_en = pivot_en
 
 
-DOMAIN_CATEGORIES: Tuple[str, ...] = ("legal", "business", "environment", "tech", "medical", "general")
-SPECIALIZED_CATEGORIES: Tuple[str, ...] = ("legal", "business", "environment", "tech", "medical")
+DOMAIN_CATEGORIES: Tuple[str, ...] = (
+    "legal",
+    "finance",
+    "trade",
+    "it_telecom",
+    "engineering",
+    "energy_env",
+    "medical",
+    "chemicals",
+    "agri_food",
+    "general",
+)
+
+SPECIALIZED_CATEGORIES: Tuple[str, ...] = (
+    "legal",
+    "finance",
+    "trade",
+    "it_telecom",
+    "engineering",
+    "energy_env",
+    "medical",
+    "chemicals",
+    "agri_food",
+)
+
+DOMAIN_LABELS: Dict[str, str] = {
+    "legal": "Law, Judiciary, EU Legislation & Treaties",
+    "finance": "Finance, Banking (CRR/ECB), Accounting (IFRS) & Tax",
+    "trade": "International Trade, Customs, Procurement, Competition & Business",
+    "it_telecom": "IT, Software, Cybersecurity (NIS2), AI & Telecommunications",
+    "engineering": "Engineering, Automotive, Transport, Aviation & Machinery",
+    "energy_env": "Energy, Climate, Emissions (EU ETS), Waste & Environment",
+    "medical": "Medicine, Pharmaceuticals, Medical Devices & Veterinary",
+    "chemicals": "Chemicals, REACH/CLP, Safety Data Sheets (SDS) & Biocides",
+    "agri_food": "Agriculture, Food Safety (EFSA), Animal Feed & Fisheries",
+    "general": "General, Administrative & Unclassified",
+}
+
+# Convenient CLI / input shorthand aliases mapped to canonical category codes
+CATEGORY_ALIASES: Dict[str, str] = {
+    "business": "trade",
+    "customs": "trade",
+    "environment": "energy_env",
+    "energy": "energy_env",
+    "climate": "energy_env",
+    "it": "it_telecom",
+    "telecom": "it_telecom",
+    "cyber": "it_telecom",
+    "tech": "engineering",
+    "transport": "engineering",
+    "automotive": "engineering",
+    "pharma": "medical",
+    "health": "medical",
+    "chem": "chemicals",
+    "reach": "chemicals",
+    "food": "agri_food",
+    "agri": "agri_food",
+    "agriculture": "agri_food",
+}
 
 
 def parse_categories_arg(raw: Optional[str]) -> Optional[Set[str]]:
-    """Parses a comma-separated list of categories into a validated set, or None for all."""
+    """Parses a comma-separated list of categories (supporting aliases) into a validated set, or None for all."""
     if not raw or not raw.strip():
         return None
     tokens = [t.strip().lower() for t in re.split(r"[,;\s]+", raw.strip()) if t.strip()]
     if not tokens or "all" in tokens:
         return None
-    valid = {t for t in tokens if t in DOMAIN_CATEGORIES}
+    valid: Set[str] = set()
+    for t in tokens:
+        mapped = CATEGORY_ALIASES.get(t, t)
+        if mapped in DOMAIN_CATEGORIES:
+            valid.add(mapped)
     return valid if valid else None
 
 
 class OfflineTfidfBayesClassifier:
     """
-    Level A2: Pure-Python statistical TF-IDF + Bigram Naive Bayes classifier (stdlib only).
+    Stage A2: Pure-Python statistical TF-IDF + Bigram centroid classifier (stdlib only).
     Tokenizes into hyphen-preserving unigrams and bigrams, computes L2-normalized
-    TF-IDF cosine similarity against curated EU domain centroids, and returns
-    statistical confidence boosts (+0, +1, or +2) per specialized domain.
+    TF-IDF cosine similarity against curated EU domain prototypes across all 9 specialized
+    verticals, and returns statistical confidence boosts (+0, +1, or +2).
     """
 
-    # Curated n-gram (unigram + bigram) weighted domain prototypes trained on EU corpus terms
     _DOMAIN_PROTOTYPES: Dict[str, Dict[str, float]] = {
         "legal": {
             "regulation": 2.4, "directive": 2.4, "decision": 1.6, "treaty": 2.6,
             "jurisdiction": 2.8, "infringement": 2.8, "tribunal": 2.6, "court": 2.0,
-            "legislation": 2.4, "legislative": 2.2, "statutory": 2.6, "liability": 2.2,
-            "obligation": 1.8, "compliance": 1.9, "enforcement": 2.2, "enforceable": 2.5,
-            "sanction": 2.2, "penalty": 2.0, "penalties": 2.0, "amendment": 1.8,
-            "repeal": 2.5, "annex": 1.6, "article": 1.5, "paragraph": 1.4,
-            "member_states": 1.8, "official_journal": 2.3, "legal_basis": 2.6,
-            "competent_authority": 2.2, "competent_authorities": 2.2, "equal_treatment": 2.7,
-            "entry_into_force": 2.4, "pursuant_to": 2.1, "court_of_justice": 2.9,
+            "legislation": 2.4, "legislative": 2.2, "statutory": 2.6, "liability": 2.1,
+            "obligation": 1.8, "compliance": 1.9, "enforceable": 2.5, "sanction": 2.2,
+            "penalty": 2.0, "penalties": 2.0, "repeal": 2.5, "member_states": 1.8,
+            "official_journal": 2.3, "legal_basis": 2.6, "competent_authority": 2.2,
+            "equal_treatment": 2.7, "entry_into_force": 2.4, "pursuant_to": 2.1,
+            "court_of_justice": 2.9, "restrictive_measures": 2.7, "fundamental_rights": 2.6,
             "rozporządzenie": 2.4, "dyrektywa": 2.4, "trybunał": 2.6, "ustawa": 2.4,
-            "postępowanie": 1.9, "odpowiedzialność": 2.0, "dziennik_urzędowy": 2.3,
+            "postępowanie": 1.9, "dziennik_urzędowy": 2.3,
         },
-        "business": {
-            "state_aid": 3.0, "undertaking": 2.6, "undertakings": 2.6, "market": 1.8,
-            "competition": 2.2, "competitiveness": 2.2, "enterprise": 2.2, "enterprises": 2.2,
-            "financial": 2.0, "finance": 2.0, "investment": 2.2, "investor": 2.3,
-            "banking": 2.4, "bank": 1.9, "credit": 1.8, "loan": 2.1,
-            "tax": 2.2, "taxation": 2.4, "vat": 2.7, "tariff": 2.6,
-            "customs_duty": 2.8, "excise": 2.6, "audit": 2.3, "accounting": 2.4,
-            "insolvency": 2.8, "bankruptcy": 2.8, "merger": 2.7, "acquisition": 2.5,
-            "procurement": 2.5, "shareholder": 2.6, "dividend": 2.7, "subsidy": 2.5,
-            "subsidies": 2.5, "turnover": 2.2, "revenue": 2.1, "profit": 2.1,
-            "tax_treatment": 2.7, "preferential_treatment": 2.5, "pomoc_państwa": 3.0,
-            "przedsiębiorstwo": 2.4, "rynek": 1.8, "podatek": 2.2, "konkurencja": 2.2,
+        "finance": {
+            "financial": 2.1, "finance": 2.1, "banking": 2.6, "bank": 2.0, "central_bank": 2.9,
+            "credit_institution": 2.9, "credit_institutions": 2.9, "credit": 2.0, "loan": 2.2,
+            "interest_rate": 2.7, "sovereign_debt": 2.9, "recapitalisation": 2.9,
+            "liquidity_coverage": 3.0, "leverage_ratio": 2.9, "prudential": 2.7,
+            "balance_sheet": 2.9, "comprehensive_income": 3.0, "fair_value": 2.9,
+            "impairment_loss": 3.0, "amortisation": 2.7, "depreciation": 2.7,
+            "financial_assets": 3.0, "non-current_assets": 2.9, "equity": 2.5,
+            "receivables": 2.6, "accounting": 2.6, "audit": 2.3, "ifrs": 3.0,
+            "tax": 2.3, "taxation": 2.5, "vat": 2.8, "excise": 2.6, "fiscal": 2.5,
+            "insolvency": 2.8, "bankruptcy": 2.8, "dividend": 2.7, "shareholder": 2.6,
+            "issuing_shares": 2.9, "stock_exchange": 2.8, "sprawozdanie_finansowe": 3.0,
+            "aktywa_finansowe": 3.0, "podatek": 2.4, "księgowość": 2.5, "upadłość": 2.8,
         },
-        "environment": {
-            "emission": 2.3, "emissions": 2.3, "pollutant": 2.8, "pollutants": 2.8,
-            "pollution": 2.7, "greenhouse": 2.8, "greenhouse_gas": 3.0, "co2": 2.9,
-            "carbon_dioxide": 2.9, "climate": 2.4, "climate_change": 2.8, "biodiversity": 2.9,
-            "ecosystem": 2.8, "deforestation": 2.9, "habitat": 2.5, "wildlife": 2.6,
-            "forestry": 2.5, "recycling": 2.6, "waste": 2.0, "hazardous_waste": 2.9,
-            "landfill": 2.8, "effluent": 2.8, "dioxin": 2.9, "dioxins": 2.9,
-            "furans": 2.9, "pcbs": 2.8, "ozone": 2.8, "renewable_energy": 2.8,
-            "water_quality": 2.6, "air_quality": 2.6, "groundwater": 2.7, "sustainability": 2.4,
-            "waste_treatment": 2.8, "water_treatment": 2.8, "sewage_treatment": 2.9,
-            "exhaust_emissions": 2.6, "particulate_traps": 2.4, "denox_catalysts": 2.5,
-            "środowisko": 2.4, "zanieczyszczenia": 2.7, "emisja": 2.3, "klimat": 2.4,
+        "trade": {
+            "state_aid": 3.0, "undertaking": 2.5, "undertakings": 2.5, "anti-dumping": 3.1,
+            "countervailing": 3.0, "customs_duty": 2.9, "customs_tariff": 2.9, "tariff": 2.6,
+            "combined_nomenclature": 3.0, "rules_of_origin": 2.9, "free_trade": 2.8,
+            "export_levy": 2.9, "public_procurement": 3.0, "procurement": 2.5,
+            "contracting_authority": 2.8, "tender": 2.4, "antitrust": 2.9, "merger": 2.7,
+            "competition": 2.3, "competitiveness": 2.2, "internal_market": 2.4,
+            "enterprise": 2.2, "enterprises": 2.2, "sme": 2.6, "subsidy": 2.5, "subsidies": 2.5,
+            "exporting_producers": 2.9, "importers": 2.5, "exporters": 2.5,
+            "pomoc_państwa": 3.0, "zamówienia_publiczne": 3.0, "antydumpingowe": 3.0,
+            "przedsiębiorstwo": 2.4, "konkurencja": 2.3, "taryfa_celna": 2.9,
         },
-        "tech": {
-            "engine": 2.4, "engines": 2.4, "diesel": 2.4, "vehicle": 2.3, "vehicles": 2.3,
-            "automotive": 2.5, "homologation": 2.8, "type-approval": 2.8,
-            "after-treatment": 2.9, "exhaust_after-treatment": 3.1, "after_treatment": 2.7,
-            "compression-ignition": 3.0, "positive-ignition": 3.0, "turbocharger": 2.8,
-            "opacimeter": 2.9, "silencer": 2.6, "headlamp": 2.7, "brake": 2.3,
-            "fuel_delivery": 2.5, "rated_power": 2.5, "engine_mapping": 2.7,
-            "software": 2.4, "hardware": 2.4, "algorithm": 2.7, "digital": 2.0,
-            "cybersecurity": 2.9, "encryption": 2.8, "cryptography": 2.9,
-            "semiconductor": 2.9, "photovoltaic": 2.9, "telecommunications": 2.6,
-            "broadband": 2.6, "bandwidth": 2.6, "interoperability": 2.6,
-            "voltage": 2.5, "electronic": 2.1, "sensor": 2.3, "calibration": 2.4,
-            "apparatus": 2.0, "machinery": 2.1, "silnik": 2.4, "pojazd": 2.3,
-            "oczyszczania_spalin": 2.9, "oczyszczaniem_spalin": 2.9, "oprogramowanie": 2.4,
+        "it_telecom": {
+            "cybersecurity": 3.1, "encryption": 2.9, "cryptography": 2.9, "algorithm": 2.7,
+            "artificial_intelligence": 3.1, "machine_learning": 3.0, "cloud_computing": 2.9,
+            "software": 2.6, "hardware": 2.4, "database": 2.4, "server": 2.4,
+            "telecommunications": 2.9, "broadband": 2.8, "bandwidth": 2.7, "wireless": 2.5,
+            "radio_spectrum": 2.9, "radio_frequency": 2.8, "interoperability": 2.7,
+            "information_systems": 2.8, "personal_data": 2.9, "data_protection": 2.9,
+            "anonymisation": 2.8, "electronic_identification": 2.9, "trust_services": 2.8,
+            "digital_services": 2.8, "online_platform": 2.8, "source_code": 2.8,
+            "cyberbezpieczeństwo": 3.1, "oprogramowanie": 2.6, "telekomunikacja": 2.9,
+            "dane_osobowe": 2.9, "sztuczna_inteligencja": 3.1,
+        },
+        "engineering": {
+            "engine": 2.5, "engines": 2.5, "diesel": 2.5, "vehicle": 2.4, "vehicles": 2.4,
+            "motor_vehicles": 2.8, "automotive": 2.6, "homologation": 2.9, "type-approval": 2.9,
+            "after-treatment": 3.0, "exhaust_after-treatment": 3.1, "compression-ignition": 3.0,
+            "positive-ignition": 3.0, "turbocharger": 2.8, "opacimeter": 2.9, "particulate_traps": 2.8,
+            "headlamp": 2.7, "braking": 2.6, "aircraft": 2.5, "airworthiness": 3.0,
+            "airspace": 2.7, "ertms": 3.0, "rolling_stock": 2.9, "railway": 2.4,
+            "semiconductor": 2.9, "microprocessor": 2.8, "electrical_circuits": 2.9,
+            "voltage": 2.6, "ultrasonic": 2.7, "transducers": 2.8, "machinery": 2.3,
+            "apparatus": 2.2, "welding": 2.7, "construction_products": 2.7,
+            "silnik": 2.5, "pojazd": 2.4, "homologacja": 2.9, "oczyszczania_spalin": 3.0,
+        },
+        "energy_env": {
+            "emission": 2.4, "emissions": 2.4, "pollutant": 2.8, "pollutants": 2.8,
+            "pollution": 2.7, "greenhouse_gas": 3.1, "co2": 2.9, "carbon_dioxide": 2.9,
+            "emissions_trading": 3.0, "eu_ets": 3.0, "climate_change": 2.9, "decarbonisation": 2.9,
+            "renewable_energy": 3.0, "photovoltaic": 2.9, "wind_turbines": 2.9,
+            "biofuels": 2.8, "biogas": 2.8, "biomass": 2.7, "fossil_fuels": 2.8,
+            "energy_efficiency": 2.9, "electricity": 2.2, "biodiversity": 3.0, "ecosystem": 2.8,
+            "deforestation": 2.9, "natura_2000": 3.0, "recycling": 2.6, "hazardous_waste": 3.0,
+            "municipal_waste": 2.9, "wastewater": 2.9, "waste_treatment": 2.9, "water_treatment": 2.8,
+            "landfill": 2.8, "water_quality": 2.7, "air_quality": 2.7, "sustainability": 2.4,
+            "środowisko": 2.4, "zanieczyszczenia": 2.7, "energia_odnawialna": 3.0, "odpady": 2.3,
         },
         "medical": {
-            "pharmaceutical": 2.9, "medicinal": 2.7, "medicinal_product": 3.0,
-            "clinical_trial": 3.0, "clinical_trials": 3.0, "pharmacovigilance": 3.1,
-            "patient": 2.4, "patients": 2.4, "disease": 2.4, "diseases": 2.4,
-            "diagnosis": 2.6, "diagnostic": 2.5, "therapeutic": 2.6, "therapy": 2.4,
-            "vaccine": 2.8, "vaccination": 2.8, "immunisation": 2.8, "antibiotic": 2.8,
-            "antimicrobial": 2.8, "pathogen": 2.9, "epidemiology": 2.9, "toxicology": 2.8,
-            "carcinogenic": 2.8, "mutagenic": 2.8, "veterinary": 2.6, "zoonotic": 2.9,
-            "hospital": 2.4, "surgical": 2.6, "dosage": 2.6, "pathology": 2.8,
-            "medical_treatment": 3.0, "clinical_treatment": 3.0, "hospital_treatment": 3.0,
-            "healthcare": 2.4, "public_health": 2.3, "animal_nutrition": 2.4,
-            "feedingstuffs": 2.3, "food_safety": 2.2, "farmaceutyczny": 2.8,
-            "produkt_leczniczy": 3.0, "pacjent": 2.4, "choroba": 2.4, "szczepionka": 2.8,
+            "pharmaceutical": 2.9, "medicinal": 2.8, "medicinal_product": 3.1, "medicinal_products": 3.1,
+            "clinical_trial": 3.0, "clinical_trials": 3.0, "clinical_audits": 2.9,
+            "pharmacovigilance": 3.1, "medical_devices": 3.0, "in_vitro": 2.8,
+            "patient": 2.5, "patients": 2.5, "disease": 2.5, "diseases": 2.5,
+            "therapeutic": 2.7, "therapy": 2.4, "vaccine": 2.9, "vaccination": 2.9,
+            "immunisation": 2.8, "antibiotic": 2.9, "antimicrobial": 2.9, "pathogen": 2.9,
+            "epidemiology": 2.9, "epidemiological": 2.9, "veterinary": 2.7, "zoonotic": 2.9,
+            "hospital": 2.4, "surgical": 2.6, "dosage": 2.6, "pathology": 2.8, "histopathology": 2.9,
+            "medical_treatment": 3.0, "clinical_treatment": 3.0, "public_health": 2.5,
+            "farmaceutyczny": 2.9, "produkt_leczniczy": 3.1, "pacjent": 2.5, "szczepionka": 2.9,
+        },
+        "chemicals": {
+            "biocidal": 3.0, "biocides": 3.0, "active_substance": 2.9, "active_substances": 2.9,
+            "pesticides": 2.9, "pesticide_residues": 3.0, "herbicides": 2.9, "fungicides": 2.9,
+            "plant_protection": 2.8, "safety_data": 2.9, "reach": 2.7, "echa": 2.9,
+            "toxicology": 2.9, "toxicological": 2.9, "ecotoxicological": 3.0,
+            "carcinogenic": 2.9, "mutagenic": 2.9, "reprotoxic": 3.0, "cytotoxic": 2.9,
+            "endocrine_disrupting": 3.0, "dioxins": 2.9, "furans": 2.9, "pcbs": 2.8,
+            "hazardous_substances": 2.9, "chemical_substances": 2.8, "polymers": 2.6,
+            "fertilisers": 2.6, "detergents": 2.6, "cosmetic_products": 2.6,
+            "titanium_dioxide": 2.8, "hydrofluorocarbons": 2.8, "substancja_czynna": 2.9,
+            "produkty_biobójcze": 3.0, "toksykologia": 2.9, "pestycydów": 2.9,
+        },
+        "agri_food": {
+            "agricultural": 2.6, "agriculture": 2.6, "common_agricultural": 3.0,
+            "food_safety": 2.9, "efsa": 3.0, "novel_food": 3.0, "foodstuffs": 2.9,
+            "food_additives": 3.0, "feed_additives": 3.0, "feedingstuffs": 2.9,
+            "animal_nutrition": 2.9, "animal_feed": 2.9, "phytosanitary": 3.0,
+            "plant_health": 2.9, "organic_production": 2.9, "geographical_indications": 2.9,
+            "fishing_opportunities": 3.0, "fish_stocks": 3.0, "allowable_catches": 3.0,
+            "fisheries": 2.7, "aquaculture": 2.9, "livestock": 2.7, "animal_welfare": 2.8,
+            "bovine": 2.7, "porcine": 2.7, "poultry": 2.7, "cereals": 2.6, "wheat": 2.5,
+            "rapeseed": 2.6, "mineral_waters": 2.7, "rybołówstwo": 2.7, "rolnictwo": 2.6,
+            "bezpieczeństwo_żywności": 2.9, "pasze": 2.8, "żywność": 2.4,
         },
     }
 
@@ -783,7 +885,6 @@ class OfflineTfidfBayesClassifier:
         if not text:
             return boosts
         feats = self._extract_features(text)
-        # Skip statistical boost on very short boilerplate (dates, headings, numbers)
         if len(feats) < 4:
             return boosts
 
@@ -805,44 +906,64 @@ class OfflineTfidfBayesClassifier:
 
 class DomainClassifier:
     """
-    Two-stage offline multi-label classifier for EU DGT-TM segments across 6 domains:
-    legal, business, environment, tech, medical, and general (fallback).
+    Two-stage offline multi-label classifier for EU DGT-TM segments across 10 market-aligned categories:
+    legal, finance, trade, it_telecom, engineering, energy_env, medical, chemicals, agri_food, and general.
     Combines:
-      - Level A1: Hyphen-safe tiered regex & collocation rules + cross-domain disambiguation
-      - Level A2: Pure-Python TF-IDF / bigram statistical classifier (OfflineTfidfBayesClassifier)
-      - Dominant-only document-title context prior
+      - Stage A1: Unicode & hyphen-safe tiered regex/collocation rules, per-language
+        distinct-concept scoring (preventing EN+PL translation double-counting), and
+        cross-domain disambiguation.
+      - Stage A2: Pure-Python TF-IDF / bigram statistical classifier (OfflineTfidfBayesClassifier).
+      - Dominant-only document-title context prior.
     """
 
-    # Hyphen-safe word boundaries: prevent '-' inside compounds like 'after-treatment' from matching 'treatment'
-    _B_START = r"(?<![a-zA-Z0-9-])(?:"
-    _B_END = r")(?![a-zA-Z0-9-])"
+    _B_START = r"(?<![^\W_]|-)(?:"
+    _B_END = r")(?![^\W_]|-)"
 
-    # Tier 3 = unambiguous domain terms, Tier 2 = domain terms (need >=1 corroboration), Tier 1 = supporting terms
     _RAW_RULES: Dict[str, List[Tuple[int, str]]] = {
         "legal": [
-            (3, r"regulation|directive|decision|treaty|jurisdiction|infringement|plaintiff|defendant|tribunal|court of justice|statute|statutory|legislation|legislative|constitutional|prosecution|litigation|indictment|arbitration|subpoena|annulment|enacting|pursuant to|herein|thereof|whereas|recital|corrigendum|equal treatment|rozporządzenie|dyrektywa|trybunał|orzeczenie|jurysdykcja|ustawa|kodeks|prawodawstwo|naruszenie|powód|pozwany|sądowy|postępowanie|sprostowanie"),
-            (2, r"article\s+\d+|paragraph\s+\d+|annex\s+[ivx\d]+|official journal|competent authorit(?:y|ies)|member states?|legal basis|binding|enforceable|compliance|obligation|liability|sanction|penalty|penalties|prohibition|amendment|repeal|entry into force|artykuł\s+\d+|ustęp\s+\d+|załącznik|dziennik urzędowy|państw[oa] członkowsk|odpowiedzialność|sankcj|zakaz|zmiana|uchylenie|wejście w życie"),
-            (1, r"law|legal|court|contract|agreement|clause|provision|rule|rules|decree|authority|prawo|prawn|sąd|umowa|przepis|postanowienie|organ"),
+            (3, r"regulations?|directives?|treat(?:y|ies)|jurisdictions?|infringements?|plaintiffs?|defendants?|tribunals?|court of justice|statutes?|statutory|legislations?|legislative|constitutional|prosecutions?|litigations?|indictments?|arbitrations?|subpoenas?|annulments?|enacting|pursuant to|whereas|recitals?|corrigend(?:um|a)|equal treatment|natural and legal persons?|delegated acts?|implementing acts?|restrictive measures|fundamental rights|rule of law|rozporządzeni[a-ząćęłńóśźż]*|dyrektyw[a-ząćęłńóśźż]*|trybunał[a-ząćęłńóśźż]*|orzeczeni[a-ząćęłńóśźż]*|jurysdykcj[a-ząćęłńóśźż]*|ustaw[a-ząćęłńóśźż]*|kodeks[a-ząćęłńóśźż]*|prawodawstw[a-ząćęłńóśźż]*|naruszeni[a-ząćęłńóśźż]*|sądow[a-ząćęłńóśźż]*|sprostowani[a-ząćęłńóśźż]*|środk[a-ząćęłńóśźż]* ograniczając[a-ząćęłńóśźż]*|praworządnoś[ćci][a-ząćęłńóśźż]*"),
+            (2, r"article\s+\d+|paragraph\s+\d+|subparagraph|annex\s+[ivx\d]+|official journal|competent authorit(?:y|ies)|member states?|legal basis|binding|enforceable|compliance|obligations?|(?<!financial\s)liabilit(?:y|ies)|sanctions?|penalt(?:y|ies)|prohibitions?|amendments?|repeal(?:ed|ing)?|entry into force|decisions?|herein|thereof|artykuł[a-ząćęłńóśźż]*\s+\d+|art\.\s*\d+|ustęp[a-ząćęłńóśźż]*\s+\d+|załącznik[a-ząćęłńóśźż]*|dziennik[a-ząćęłńóśźż]* urzędow[a-ząćęłńóśźż]*|państw[a-ząćęłńóśźż]* członkowsk[a-ząćęłńóśźż]*|odpowiedzialnoś[ćci][a-ząćęłńóśźż]*|sankcj[a-ząćęłńóśźż]*|zakaz[a-ząćęłńóśźż]*|uchyleni[a-ząćęłńóśźż]*|wejście w życie"),
+            (1, r"law|legal|courts?|contracts?|agreements?|clauses?|provisions?|rules?|decrees?|authorit(?:y|ies)|prawo|prawn[a-ząćęłńóśźż]*|sąd(?:u|y|ów|zie|om)?|umow[a-ząćęłńóśźż]*|przepis[a-ząćęłńóśźż]*|postanowieni[a-ząćęłńóśźż]*|organ(?:u|y|ów|om)?"),
         ],
-        "business": [
-            (3, r"state aid|undertaking|undertakings|merger|acquisition|antitrust|insolvency|bankruptcy|procurement|shareholder|dividend|balance sheet|fiscal|customs duty|tariff|vat|value added tax|excise|stock exchange|subsidy|subsidies|microenterprise|sme|tax treatment|preferential treatment|pomoc państwa|przedsiębiorstw|fuzj|przejęci|upadłość|zamówienia publiczne|akcjonariusz|dywidenda|bilans|podatek|cło|taryfa|vat|akcyza|giełda|dotacj|subwencj"),
-            (2, r"market|trade|commercial|enterprise|company|corporate|financial|finance|investment|investor|banking|bank|credit|loan|revenue|profit|turnover|taxation|audit|accounting|competition|competitiveness|export|import|consumer|rynek|handel|handlow|spółka|finansow|inwestycj|bankow|kredyt|pożyczka|przychód|zysk|obrót|opodatkowanie|audyt|księgowość|konkurencj|konsument"),
-            (1, r"business|economic|economy|price|cost|payment|fee|fund|budget|capital|asset|biznes|gospodar|cena|koszt|płatność|opłata|fundusz|budżet|kapitał"),
+        "finance": [
+            (3, r"balance sheets?|profit or loss|comprehensive income|fair value|impairment loss|amortisation|depreciation|trade receivables|non-current assets?|current assets?|financial assets?|financial liabilit(?:y|ies)|cash flows?|financial statements?|ifrs|ias\s+\d+|capital adequacy|liquidity coverage|net stable funding|leverage ratio|prudential supervision|credit institutions?|central banks?|recapitalisation|sovereign debt|issuing shares|shareholders?|dividends?|stock exchange|value added tax|vat|excise dut(?:y|ies)|excise|corporate tax|income tax|tax treatment|insolvenc(?:y|ies)|bankruptc(?:y|ies)|bilans[a-ząćęłńóśźż]*|rachun[a-ząćęłńóśźż]* zysków i strat|całkowit[a-ząćęłńóśźż]* dochod[a-ząćęłńóśźż]*|wartoś[ćci] godziw[a-ząćęłńóśźż]*|odpis[a-ząćęłńóśźż]* aktualizując[a-ząćęłńóśźż]*|amortyzacj[a-ząćęłńóśźż]*|aktyw[a-ząćęłńóśźż]* finansow[a-ząćęłńóśźż]*|aktyw[a-ząćęłńóśźż]* trwał[a-ząćęłńóśźż]*|zobowiązani[a-ząćęłńóśźż]* finansow[a-ząćęłńóśźż]*|przepływ[a-ząćęłńóśźż]* pieniężn[a-ząćęłńóśźż]*|sprawozdani[a-ząćęłńóśźż]* finansow[a-ząćęłńóśźż]*|instytucj[a-ząćęłńóśźż]* kredytow[a-ząćęłńóśźż]*|nadzór ostrożnościowy|bank[a-ząćęłńóśźż]* centraln[a-ząćęłńóśźż]*|dokapitalizowani[a-ząćęłńóśźż]*|dług[a-ząćęłńóśźż]* publiczn[a-ząćęłńóśźż]*|papier[a-ząćęłńóśźż]* wartościow[a-ząćęłńóśźż]*|obligacj[a-ząćęłńóśźż]*|emisj[a-ząćęłńóśźż]* akcji|akcjonariusz[a-ząćęłńóśźż]*|dywidend[a-ząćęłńóśźż]*|giełd[a-ząćęłńóśźż]*|podat(?:ek|ku|ki|ków|kow[a-ząćęłńóśźż]*)|akcyz[a-ząćęłńóśźż]*|upadłoś[ćci][a-ząćęłńóśźż]*|niewypłacalnoś[ćci][a-ząćęłńóśźż]*"),
+            (2, r"financial|finance|banking|banks?|credits?|loans?|interest rates?|investments?|investors?|insurance|reinsurance|pensions?|taxation|fiscal|audits?|auditors?|accounting|equity|receivables|revenues?|profits?|securities|bonds?|appropriations?|finansow[a-ząćęłńóśźż]*|bankow[a-ząćęłńóśźż]*|kredyt[a-ząćęłńóśźż]*|pożyczk[a-ząćęłńóśźż]*|stop[a-ząćęłńóśźż]* procentow[a-ząćęłńóśźż]*|inwestycj[a-ząćęłńóśźż]*|ubezpieczeni[a-ząćęłńóśźż]*|emerytaln[a-ząćęłńóśźż]*|opodatkowani[a-ząćęłńóśźż]*|fiskaln[a-ząćęłńóśźż]*|audyt[a-ząćęłńóśźż]*|biegł[a-ząćęłńóśźż]* rewident[a-ząćęłńóśźż]*|księgowoś[ćci][a-ząćęłńóśźż]*|rachunkowoś[ćci][a-ząćęłńóśźż]*|kapitał[a-ząćęłńóśźż]* własn[a-ząćęłńóśźż]*|należności[a-ząćęłńóśźż]*|przychod[a-ząćęłńóśźż]*|zysk(?:u|i|ów|om|iem|ami|ach)?"),
+            (1, r"funds?|budgets?|capital|assets?|payments?|shares|currenc(?:y|ies)|exchange rates?|fundusz[a-ząćęłńóśźż]*|budżet[a-ząćęłńóśźż]*|kapitał[a-ząćęłńóśźż]*|aktyw(?:a|ów|ach)|płatnoś[ćci][a-ząćęłńóśźż]*|walut[a-ząćęłńóśźż]*|kurs[a-ząćęłńóśźż]* wymiany"),
         ],
-        "environment": [
-            (3, r"greenhouse gas|co2|carbon dioxide|biodiversity|ecosystem|deforestation|natura 2000|dioxin|dioxins|furans|pcbs|pollutant|pollutants|pollution|effluent|hazardous waste|landfill|ozone|climate change|renewable energy|emissions trading|environmental impact|waste treatment|water treatment|sewage treatment|cieplarnian|dwutlenek węgla|bioróżnorodność|ekosystem|wylesianie|dioksyn|zanieczyszczeni|odpady niebezpieczne|składowisko|ozon|zmian[ay] klimatu|energia odnawialna|ochrona środowiska"),
-            (2, r"environment|environmental|emission|emissions|climate|waste|recycling|water quality|groundwater|marine|forestry|wildlife|habitat|species|ecology|ecological|sustainability|sustainable|soil|air quality|noise|środowisk|emisj|klimat|odpad|recykling|wód|wody|morsk|leśn|siedlisk|gatunk|ekolog|zrównoważon|gleb|powietrz|hałas"),
-            (1, r"fuel|exhaust|nature|natural|conservation|river|sea|forest|paliwo|spalin|natura|ochrona|rzeka|morze|las"),
+        "trade": [
+            (3, r"state aid|anti-dumping|countervailing|customs dut(?:y|ies)|customs tariffs?|combined nomenclature|tariff quotas?|rules of origin|preferential origin|preferential treatment|free trade agreements?|export lev(?:y|ies)|safeguard investigations?|public procurement|contracting authorit(?:y|ies)|tenderers?|antitrust|cartels?|mergers?|acquisitions?|undertaking(?!\s+services)|undertakings|microenterprises?|smes?|exporting producers?|pomoc[a-ząćęłńóśźż]* państwa|antydumping[a-ząćęłńóśźż]*|cło|cła|ceł|celn[a-ząćęłńóśźż]*|taryf[a-ząćęłńóśźż]* celn[a-ząćęłńóśźż]*|nomenklatur[a-ząćęłńóśźż]* scalon[a-ząćęłńóśźż]*|kontyngent[a-ząćęłńóśźż]* taryfow[a-ząćęłńóśźż]*|reguł[a-ząćęłńóśźż]* pochodzenia|umow[a-ząćęłńóśźż]* o wolnym handlu|zamówieni[a-ząćęłńóśźż]* publiczn[a-ząćęłńóśźż]*|instytucj[a-ząćęłńóśźż]* zamawiając[a-ząćęłńóśźż]*|oferent[a-ząćęłńóśźż]*|kartel[a-ząćęłńóśźż]*|fuzj[a-ząćęłńóśźż]*|przedsiębiorstw[a-ząćęłńóśźż]*|mśp"),
+            (2, r"markets?|internal market|single market|trade|commercial|enterprises?|compan(?:y|ies)|corporate|competition|competitiveness|exports?|exporting|exporters?|imports?|importing|importers?|customs|tariffs?|subsid(?:y|ies)|procurement|tenders?|concessions?|consumers?|turnover|supply chains?|rynek|rynku|rynkow[a-ząćęłńóśźż]*|rynki|rynków|handel|handlu|handlem|handlow[a-ząćęłńóśźż]*|spół(?:ka|ki|ek|ce|kę)|konkurencj[a-ząćęłńóśźż]*|konkurencyjnoś[ćci][a-ząćęłńóśźż]*|eksport[a-ząćęłńóśźż]*|wywóz|wywozu|wywozow[a-ząćęłńóśźż]*|import[a-ząćęłńóśźż]*|przywóz|przywozu|przywozow[a-ząćęłńóśźż]*|taryf[a-ząćęłńóśźż]*|dotacj[a-ząćęłńóśźż]*|subwencj[a-ząćęłńóśźż]*|subsydi[a-ząćęłńóśźż]*|przetarg[a-ząćęłńóśźż]*|koncesj[a-ząćęłńóśźż]*|konsument[a-ząćęłńóśźż]*|łańcuch[a-ząćęłńóśźż]* dostaw"),
+            (1, r"business|economic|economy|prices?|costs?|fees?|quotas?|suppliers?|manufacturers?|producers?|biznes[a-ząćęłńóśźż]*|gospodar[a-ząćęłńóśźż]*|cen[ay]|koszt[a-ząćęłńóśźż]*|opłat[a-ząćęłńóśźż]*|kontyngent[a-ząćęłńóśźż]*|dostawc[a-ząćęłńóśźż]*|producent[a-ząćęłńóśźż]*"),
         ],
-        "tech": [
-            (3, r"after-treatment|after treatment|exhaust after-treatment|exhaust after treatment|oczyszczani[aeu] spalin|oczyszczaniem spalin|compression-ignition|positive-ignition|lpg|photovoltaic|semiconductor|cybersecurity|cryptography|encryption|algorithm|microprocessor|telecommunications|broadband|bandwidth|interoperability|bluetooth|wireless|radio frequency|adaptive front-lighting|type-approval|homologation|opacimeter|turbocharger|particulate traps?|denox|zapłon samoczynny|zapłon wymuszony|półprzewodnik|cyberbezpieczeństwo|kryptografia|szyfrowanie|algorytm|telekomunikac|szerokopasmow|interoperacyjność|częstotliwość radiowa|homologacja|filtr[ay]? cząstek stałych"),
-            (2, r"engine|engines|diesel|vehicle|vehicles|automotive|brake|headlamp|wheel|voltage|electric|electronic|digital|software|hardware|database|network|server|internet|platform|sensor|apparatus|machinery|calibration|measurement|specification|technical|heat treatment|silnik|silniki|pojazd|samochod|hamulc|reflektor|koło|napięcie|elektryczn|elektroniczn|cyfrow|oprogramowanie|sprzęt|baza danych|sieć|serwer|czujnik|urządzenie|maszyn|kalibracja|pomiar|specyfikacj|techniczn"),
-            (1, r"device|equipment|machine|parameter|signal|wyposażenie|parametr|sygnał"),
+        "it_telecom": [
+            (3, r"cybersecurity|cryptography|encryption|algorithms?|artificial intelligence|machine learning|neural networks?|cloud computing|telecommunications?|telecommunication|broadband|bandwidth|radio spectrum|radio frequency|interoperability|information systems?|network and information|personal data|data protection|pseudonymisation|anonymisation|electronic identification|trust services?|digital services?|online platforms?|search engines?|source code|open source|malware|ransomware|cyberbezpieczeństw[a-ząćęłńóśźż]*|kryptografi[a-ząćęłńóśźż]*|szyfrowani[a-ząćęłńóśźż]*|algorytm[a-ząćęłńóśźż]*|sztuczn[a-ząćęłńóśźż]* inteligencj[a-ząćęłńóśźż]*|uczeni[a-ząćęłńóśźż]* maszynow[a-ząćęłńóśźż]*|chmur[a-ząćęłńóśźż]* obliczeniow[a-ząćęłńóśźż]*|telekomunikac[a-ząćęłńóśźż]*|szerokopasmow[a-ząćęłńóśźż]*|częstotliwoś[ćci] radiow[a-ząćęłńóśźż]*|widm[a-ząćęłńóśźż]* radiow[a-ząćęłńóśźż]*|interoperacyjnoś[ćci][a-ząćęłńóśźż]*|system[a-ząćęłńóśźż]* informatyczn[a-ząćęłńóśźż]*|dan[a-ząćęłńóśźż]* osobow[a-ząćęłńóśźż]*|ochron[a-ząćęłńóśźż]* danych|anonimizacj[a-ząćęłńóśźż]*|identyfikacj[a-ząćęłńóśźż]* elektroniczn[a-ząćęłńóśźż]*|usług[a-ząćęłńóśźż]* zaufania|usług[a-ząćęłńóśźż]* cyfrow[a-ząćęłńóśźż]*|platform[a-ząćęłńóśźż]* internetow[a-ząćęłńóśźż]*|kod[a-ząćęłńóśźż]* źródłow[a-ząćęłńóśźż]*"),
+            (2, r"software|hardware|databases?|servers?|internet|wireless|bluetooth|satellite communication|digital|electronic\s+(?:means|communications?|registr(?:y|ies)|signatures?|data)|it networks?|information technology|authentication|vulnerabilit(?:y|ies)|interfaces?|metadata|oprogramowani[a-ząćęłńóśźż]*|baz[ay] danych|baz danych|serwer[a-ząćęłńóśźż]*|bezprzewodow[a-ząćęłńóśźż]*|cyfrow[a-ząćęłńóśźż]*|informatyczn[a-ząćęłńóśźż]*|uwierzytelniani[a-ząćęłńóśźż]*|podatności[a-ząćęłńóśźż]*|interfejs[a-ząćęłńóśźż]*|metadan[a-ząćęłńóśźż]*"),
+            (1, r"networks?|platforms?|portals?|online|data processing|electronic|sieci[a-ząćęłńóśźż]*|przetwarzani[a-ząćęłńóśźż]* danych|elektroniczn[a-ząćęłńóśźż]*"),
+        ],
+        "engineering": [
+            (3, r"after-treatment|after treatment|exhaust after-treatment|exhaust after treatment|oczyszczani[aeu] spalin|oczyszczaniem spalin|compression-ignition|positive-ignition|type-approval|homologation|opacimeters?|turbochargers?|particulate traps?|denox|on-board diagnostic|adaptive front-lighting|motor vehicles?|rolling stock|ertms|airworthiness|air traffic|airspace|aerodromes?|unmanned aircraft|semiconductors?|microprocessors?|electrical circuits?|construction products?|ultrasonic transducers?|soldering|brazing|welding|zapłon[a-ząćęłńóśźż]* samoczynn[a-ząćęłńóśźż]*|zapłon[a-ząćęłńóśźż]* wymuszon[a-ząćęłńóśźż]*|homologacj[a-ząćęłńóśźż]*|filtr[a-ząćęłńóśźż]* cząstek stałych|pojazd[a-ząćęłńóśźż]* silnikow[a-ząćęłńóśźż]*|tabor[a-ząćęłńóśźż]* kolejow[a-ząćęłńóśźż]*|zdatnoś[ćci] do lotu|ruch[a-ząćęłńóśźż]* lotnicz[a-ząćęłńóśźż]*|przestrzeni[a-ząćęłńóśźż]* powietrzn[a-ząćęłńóśźż]*|lotnisk[a-ząćęłńóśźż]*|półprzewodnik[a-ząćęłńóśźż]*|obwod[a-ząćęłńóśźż]* elektryczn[a-ząćęłńóśźż]*|wyrob[a-ząćęłńóśźż]* budowlan[a-ząćęłńóśźż]*|spawani[a-ząćęłńóśźż]*|lutowani[a-ząćęłńóśźż]*|zgrzewani[a-ząćęłńóśźż]*"),
+            (2, r"engines?|diesel|vehicles?|automotive|aircraft|avionics|diagnostic systems?|railway|maritime transport|brakes?|braking|headlamps?|tyres?|tires?|chassis|axles?|steering|voltage|electric|electrical|sensors?|apparatus|machinery|turbines?|boilers?|pumps?|valves?|compressors?|calibration|metrology|heat treatment|technical specifications?|silnik[a-ząćęłńóśźż]*|pojazd[a-ząćęłńóśźż]*|samochod[a-ząćęłńóśźż]*|statk[a-ząćęłńóśźż]* powietrzn[a-ząćęłńóśźż]*|kolejow[a-ząćęłńóśźż]*|hamulc[a-ząćęłńóśźż]*|hamowani[a-ząćęłńóśźż]*|reflektor[a-ząćęłńóśźż]*|opon[a-ząćęłńóśźż]*|podwozi[a-ząćęłńóśźż]*|napięci[a-ząćęłńóśźż]*|elektryczn[a-ząćęłńóśźż]*|czujnik[a-ząćęłńóśźż]*|maszyn[a-ząćęłńóśźż]*|turbin[a-ząćęłńóśźż]*|pomp[ay]?|zawor[a-ząćęłńóśźż]*|sprężark[a-ząćęłńóśźż]*|kalibracj[a-ząćęłńóśźż]*|obróbk[a-ząćęłńóśźż]* ciepln[a-ząćęłńóśźż]*|specyfikacj[a-ząćęłńóśźż]* techniczn[a-ząćęłńóśźż]*"),
+            (1, r"devices?|equipment|machines?|appliances?|parameters?|signals?|measurements?|specifications?|mechanical|technical(?!\s+assistance)(?!\s+and\s+administrative)|exhaust|urządzeni[a-ząćęłńóśźż]*|wyposażeni[a-ząćęłńóśźż]*|sprzęt[u]?|parametr[a-ząćęłńóśźż]*|sygnał[a-ząćęłńóśźż]*|pomiar[a-ząćęłńóśźż]*|mechaniczn[a-ząćęłńóśźż]*|spalin[a-ząćęłńóśźż]*"),
+        ],
+        "energy_env": [
+            (3, r"greenhouse gas(?:es)?|co2(?!\s*,\s*and\s*incubation)|co2eq|carbon dioxide|emissions trading|eu ets|climate change|decarbonisation|energy efficiency|renewable energy|renewable gas|photovoltaic|wind turbines?|offshore wind|biofuels?|biogas|biomass|fossil fuels?|repowereu|power grids?|electricity grids?|biodiversity|ecosystems?|deforestation|natura 2000|hazardous waste|municipal waste|waste incineration|waste treatment|water treatment|sewage treatment|wastewater|landfills?|effluents?|environmental impact|cieplarnian[a-ząćęłńóśźż]*|dwutlen(?:ek|ku) węgla|handl[a-ząćęłńóśźż]* przydziałami emisji|zmian[a-ząćęłńóśźż]* klimatu|dekarbonizacj[a-ząćęłńóśźż]*|efektywnoś[ćci] energetyczn[a-ząćęłńóśźż]*|energi[a-ząćęłńóśźż]* odnawialn[a-ząćęłńóśźż]*|odnawialn[a-ząćęłńóśźż]* źródł[a-ząćęłńóśźż]* energii|fotowoltaiczn[a-ząćęłńóśźż]*|fotowoltaik[a-ząćęłńóśźż]*|turbin[a-ząćęłńóśźż]* wiatrow[a-ząćęłńóśźż]*|biopaliw[a-ząćęłńóśźż]*|biogaz[a-ząćęłńóśźż]*|biomas[a-ząćęłńóśźż]*|paliw[a-ząćęłńóśźż]* kopaln[a-ząćęłńóśźż]*|sieci[a-ząćęłńóśźż]* elektroenergetyczn[a-ząćęłńóśźż]*|bioróżnorodnoś[ćci][a-ząćęłńóśźż]*|różnorodnoś[ćci] biologiczn[a-ząćęłńóśźż]*|ekosystem[a-ząćęłńóśźż]*|wylesiani[a-ząćęłńóśźż]*|odpad[a-ząćęłńóśźż]* niebezpieczn[a-ząćęłńóśźż]*|odpad[a-ząćęłńóśźż]* komunaln[a-ząćęłńóśźż]*|spalani[a-ząćęłńóśźż]* odpadów|oczyszczani[a-ząćęłńóśźż]* ścieków|ściek[a-ząćęłńóśźż]*|składowisk[a-ząćęłńóśźż]*|ochron[a-ząćęłńóśźż]* środowiska"),
+            (2, r"environment|environmental|emissions?|pollutants?|pollution|climate|waste|recycling|circular economy|water quality|groundwater|surface water|forestry|wildlife|habitats?|endangered species|ecology|ecological|sustainability|sustainable|air quality|energy consumption|electricity|natural gas|nuclear energy|środowisk[a-ząćęłńóśźż]*|emisj[a-ząćęłńóśźż]*(?!\s+akcji)(?!\s+obligacji)(?!\s+papierów)|zanieczyszczeni[a-ząćęłńóśźż]*|klimat[a-ząćęłńóśźż]*|odpad[a-ząćęłńóśźż]*|recykling[a-ząćęłńóśźż]*|gospodark[a-ząćęłńóśźż]* o obiegu zamkniętym|jakoś[ćci] wody|wody podziemne|wody powierzchniowe|leśnictw[a-ząćęłńóśźż]*|siedlisk[a-ząćęłńóśźż]*|ekolog[a-ząćęłńóśźż]*|zrównoważon[a-ząćęłńóśźż]*|jakoś[ćci] powietrza|zużyci[a-ząćęłńóśźż]* energii|energi[a-ząćęłńóśźż]* elektryczn[a-ząćęłńóśźż]*|gaz[a-ząćęłńóśźż]* ziemn[a-ząćęłńóśźż]*|energi[a-ząćęłńóśźż]* jądrow[a-ząćęłńóśźż]*"),
+            (1, r"energy|fuels?|exhaust|nature|natural(?!\s+and\s+legal\s+persons?)(?!\s+persons?)(?!\s+gas)|conservation|rivers?|marine|forests?|soil|ozone|energi[a-ząćęłńóśźż]*|paliw[a-ząćęłńóśźż]*|spalin[a-ząćęłńóśźż]*|przyrod[a-ząćęłńóśźż]*|rzek[ai]|morsk[a-ząćęłńóśźż]*|las(?:u|y|ów|om|ach)?|gleb[ay]|ozon[a-ząćęłńóśźż]*"),
         ],
         "medical": [
-            (3, r"pharmaceutical|medicinal product|clinical trial|clinical trials|pharmacovigilance|toxicology|carcinogenic|mutagenic|pathogen|epidemiology|vaccine|vaccination|immunisation|antibiotic|antimicrobial|veterinary|animal nutrition|feedingstuffs|zoonotic|diagnos(?:is|tic)|therapeutic|pathology|medical treatment|clinical treatment|hospital treatment|cancer treatment|outpatient treatment|farmaceutyczn|produkt leczniczy|badania kliniczne|toksykologia|rakotwórcz|patogen|epidemiolog|szczepionk|antybiotyk|weterynaryjn|żywienie zwierząt|pasz|diagnoz|terapeutyczn|patologia|leczenie szpitalne|leczenie kliniczne|leczenie medyczne"),
-            (2, r"medical|medicine|healthcare|public health|patient|patients|disease|diseases|illness|disorder|therapy|hospital|clinic|surgical|drug|dosage|contamination|hygiene|food safety|medyczn|medycyna|pacjent|chorob|zaburzen|terapia|szpital|klinik|chirurg|lek|dawka|higiena|bezpieczeństwo żywności"),
-            (1, r"blood|tissue|clinical|doctor|nurse|veterinarian|residue|krew|tkanka|kliniczny|lekarz|weterynarz|pozostałości"),
+            (3, r"pharmaceuticals?|medicinal products?|european medicines agency|clinical trials?|clinical investigations?|clinical audits?|pharmacovigilance|medical devices?|in vitro diagnostic|medical diagnos(?:is|tic)|clinical diagnos(?:is|tic)|organo-therapeutic|therapeutic|histopathology|pathology|epidemiolog(?:y|ical)|vaccines?|vaccinations?|immunisation|antibiotics?|antimicrobials?|pathogens?|communicable diseases?|foot and mouth disease|zoonotic|zoonoses|veterinary medicinal|veterinary surgeon|veterinary services?|veterinary profession|medical treatment|clinical treatment|hospital treatment|cancer treatment|outpatient treatment|eu4health|healthcare personnel|farmaceutyczn[a-ząćęłńóśźż]*|produkt[a-ząćęłńóśźż]* lecznicz[a-ząćęłńóśźż]*|europejsk[a-ząćęłńóśźż]* agencj[a-ząćęłńóśźż]* leków|badani[a-ząćęłńóśźż]* kliniczn[a-ząćęłńóśźż]*|audyt[a-ząćęłńóśźż]* kliniczn[a-ząćęłńóśźż]*|wyrob[a-ząćęłńóśźż]* medyczn[a-ząćęłńóśźż]*|diagnostyk[a-ząćęłńóśźż]* in vitro|terapeutyczn[a-ząćęłńóśźż]*|histopatologi[a-ząćęłńóśźż]*|patologi[a-ząćęłńóśźż]*|epidemiolog[a-ząćęłńóśźż]*|szczepion[a-ząćęłńóśźż]*|szczepieni[a-ząćęłńóśźż]*|antybiotyk[a-ząćęłńóśźż]*|przeciwdrobnoustrojow[a-ząćęłńóśźż]*|patogen[a-ząćęłńóśźż]*|chorob[a-ząćęłńóśźż]* zakaźn[a-ząćęłńóśźż]*|pryszczyc[a-ząćęłńóśźż]*|weterynaryjn[a-ząćęłńóśźż]*|lekarz[a-ząćęłńóśźż]* weterynarii|leczeni[a-ząćęłńóśźż]* szpitaln[a-ząćęłńóśźż]*|leczeni[a-ząćęłńóśźż]* kliniczn[a-ząćęłńóśźż]*|leczeni[a-ząćęłńóśźż]* medyczn[a-ząćęłńóśźż]*|onkologiczn[a-ząćęłńóśźż]*|personel[a-ząćęłńóśźż]* medyczn[a-ząćęłńóśźż]*"),
+            (2, r"medical|medicine|medicines|healthcare|public health|mental health|human health|animal health|patients?|diseases?|illness(?:es)?|disorders?|therap(?:y|ies)|hospitals?|clinics?|surgical|dosages?|posology|adverse reactions?|contraindications?|veterinary|medyczn[a-ząćęłńóśźż]*|medycyn[a-ząćęłńóśźż]*|ochron[a-ząćęłńóśźż]* zdrowia|opiek[a-ząćęłńóśźż]* zdrowotn[a-ząćęłńóśźż]*|zdrowi[aeu] publiczn[a-ząćęłńóśźż]*|zdrowi[aeu] psychiczn[a-ząćęłńóśźż]*|zdrowi[aeu] ludzki[a-ząćęłńóśźż]*|zdrowi[aeu] zwierząt|pacjent[a-ząćęłńóśźż]*|chorob[a-ząćęłńóśźż]*|chorób|zaburzeni[a-ząćęłńóśźż]*|terapi[a-ząćęłńóśźż]*|szpital[a-ząćęłńóśźż]*|chirurg[a-ząćęłńóśźż]*|dawk[a-ząćęłńóśźż]*|dawkowani[a-ząćęłńóśźż]*|działani[a-ząćęłńóśźż]* niepożądan[a-ząćęłńóśźż]*|przeciwwskazani[a-ząćęłńóśźż]*"),
+            (1, r"blood|tissues?|clinical|diagnosis|doctors?|physicians?|nurses?|veterinarians?|lesions?|krew|krwi|tkank[a-ząćęłńóśźż]*|kliniczn[a-ząćęłńóśźż]*|diagnoz[a-ząćęłńóśźż]*|lekarz[a-ząćęłńóśźż]*|pielęgniar[a-ząćęłńóśźż]*|weterynarz[a-ząćęłńóśźż]*"),
+        ],
+        "chemicals": [
+            (3, r"reach regulation|european chemicals agency|echa|safety data sheets?|biocidal products?|biocides?|active substances?|plant protection products?|pesticides?|herbicides?|fungicides?|insecticides?|maximum residue levels?|mrls?|pesticide residues?|endocrine disrupt(?:or|ing)|carcinogenic|mutagenic|reprotoxic|cytotoxic|ecotoxicolog(?:y|ical)|toxicolog(?:y|ical)|skin irritation|eye irritation|eye exposure|dioxins?|furans?|pcbs|polyalcohols?|diols?|titanium dioxide|hydrofluorocarbons?|kart[a-ząćęłńóśźż]* charakterystyk[a-ząćęłńóśźż]*|produkt[a-ząćęłńóśźż]* biobójcz[a-ząćęłńóśźż]*|biocyd[a-ząćęłńóśźż]*|substancj[a-ząćęłńóśźż]* czynn[a-ząćęłńóśźż]*|środk[a-ząćęłńóśźż]* ochrony roślin|pestycyd[a-ząćęłńóśźż]*|herbicyd[a-ząćęłńóśźż]*|fungicyd[a-ząćęłńóśźż]*|insektycyd[a-ząćęłńóśźż]*|najwyższ[a-ząćęłńóśźż]* dopuszczaln[a-ząćęłńóśźż]* poziom[a-ząćęłńóśźż]* pozostałości|pozostałości[a-ząćęłńóśźż]* pestycydów|zaburzając[a-ząćęłńóśźż]* funkcjonowanie układu hormonalnego|rakotwórcz[a-ząćęłńóśźż]*|mutagenn[a-ząćęłńóśźż]*|działając[a-ząćęłńóśźż]* szkodliwie na rozrodczość|cytotoksyczn[a-ząćęłńóśźż]*|ekotoksykologi[a-ząćęłńóśźż]*|toksykologi[a-ząćęłńóśźż]*|toksykologiczn[a-ząćęłńóśźż]*|dioksyn[a-ząćęłńóśźż]*|ditlen(?:ek|ku) tytanu|wodorofluorowęglowodor[a-ząćęłńóśźż]*"),
+            (2, r"chemical substances?|chemicals|hazardous substances?|hazardous mixtures?|polymers?|solvents?|fertilisers?|fertilizers?|cosmetic products?|cosmetics?|detergents?|toxicity|acute toxicity|corrosive|flammable|oxidising|exposure limits?|substancj[a-ząćęłńóśźż]* chemiczn[a-ząćęłńóśźż]*|chemikali[a-ząćęłńóśźż]*|substancj[a-ząćęłńóśźż]* niebezpieczn[a-ząćęłńóśźż]*|mieszanin[a-ząćęłńóśźż]* niebezpieczn[a-ząćęłńóśźż]*|polimer[a-ząćęłńóśźż]*|rozpuszczalnik[a-ząćęłńóśźż]*|nawoz[a-ząćęłńóśźż]*|nawozy|produkt[a-ząćęłńóśźż]* kosmetyczn[a-ząćęłńóśźż]*|kosmetyk[a-ząćęłńóśźż]*|detergent[a-ząćęłńóśźż]*|toksycznoś[ćci][a-ząćęłńóśźż]*|łatwopaln[a-ząćęłńóśźż]*|żrąc[a-ząćęłńóśźż]*"),
+            (1, r"substances?|chemical|mixtures?|compounds?|residues?|concentrations?|substancj[a-ząćęłńóśźż]*|chemiczn[a-ząćęłńóśźż]*|mieszanin[a-ząćęłńóśźż]*|pozostałości[a-ząćęłńóśźż]*|stężeni[a-ząćęłńóśźż]*"),
+        ],
+        "agri_food": [
+            (3, r"common agricultural policy|common fisheries policy|food safety|european food safety authority|efsa|novel foods?|foodstuffs?|food additives?|feed additives?|feedingstuffs?|animal feed|compound feed|animal nutrition|food and feed|phytosanitary|plant health|organic production|organic farming|geographical indications?|protected designation of origin|fishing opportunities|fish stocks?|total allowable catches?|by-catches?|aquaculture|livestock|wspóln[a-ząćęłńóśźż]* polityk[a-ząćęłńóśźż]* roln[a-ząćęłńóśźż]*|wspóln[a-ząćęłńóśźż]* polityk[a-ząćęłńóśźż]* rybołówstwa|bezpieczeństw[a-ząćęłńóśźż]* żywności|now[a-ząćęłńóśźż]* żywnoś[ćci][a-ząćęłńóśźż]*|środk[a-ząćęłńóśźż]* spożywcz[a-ząćęłńóśźż]*|dodatk[a-ząćęłńóśźż]* do żywności|dodatk[a-ząćęłńóśźż]* paszow[a-ząćęłńóśźż]*|pasz(?:a|y|ę|ą|om|ach|ami|e|owe|owych)|żywieni[a-ząćęłńóśźż]* zwierząt|żywnoś[ćci] i pasz|fitosanitarn[a-ząćęłńóśźż]*|zdrowi[aeu] roślin|produkcj[a-ząćęłńóśźż]* ekologiczn[a-ząćęłńóśźż]*|rolnictw[a-ząćęłńóśźż]* ekologiczn[a-ząćęłńóśźż]*|oznaczeni[a-ząćęłńóśźż]* geograficzn[a-ząćęłńóśźż]*|chronion[a-ząćęłńóśźż]* nazw[a-ząćęłńóśźż]* pochodzenia|uprawnieni[a-ząćęłńóśźż]* do połowów|stad[a-ząćęłńóśźż]* ryb|całkowit[a-ząćęłńóśźż]* dopuszczaln[a-ząćęłńóśźż]* połow[a-ząćęłńóśźż]*|przyłow[a-ząćęłńóśźż]*|akwakultur[a-ząćęłńóśźż]*|zwierz[a-ząćęłńóśźż]* gospodarsk[a-ząćęłńóśźż]*"),
+            (2, r"agricultural|agriculture|farmers?|crops?|cereals?|wheat|barley|maize|rapeseed|dairy|bovine|porcine|ovine|caprine|poultry|mineral waters?|aerated waters?|fisheries|fishing vessels?|slaughter(?:house)?|animal welfare|seed certification|rolnictw[a-ząćęłńóśźż]*|rolnik[a-ząćęłńóśźż]*|gospodarstw[a-ząćęłńóśźż]* roln[a-ząćęłńóśźż]*|upraw[a-ząćęłńóśźż]*|zbóż|zboża|pszenic[a-ząćęłńóśźż]*|jęczmieni[a-ząćęłńóśźż]*|kukurydz[a-ząćęłńóśźż]*|rzepak[a-ząćęłńóśźż]*|mleczarsk[a-ząćęłńóśźż]*|bydł[ao]|trzod[a-ząćęłńóśźż]* chlewn[a-ząćęłńóśźż]*|drobi[u]?|wod[ay] mineraln[a-ząćęłńóśźż]*|wod[ay] gazowan[a-ząćęłńóśźż]*|rybołówstw[a-ząćęłńóśźż]*|połow(?:u|y|ów|om|ach)|statk[a-ząćęłńóśźż]* ryback[a-ząćęłńóśźż]*|uboj[u]?|rzeźni[a-ząćęłńóśźż]*|dobrostan[a-ząćęłńóśźż]* zwierząt|materiał[a-ząćęłńóśźż]* siewn[a-ząćęłńóśźż]*"),
+            (1, r"food|feed|plants?|animals?|fish|species|harvest(?:ed)?|beverages?|sugar|wine|meat|milk|żywnoś[ćci][a-ząćęłńóśźż]*|roślin[a-ząćęłńóśźż]*|zwierząt|zwierzęta|ryb[ay]?|gatun(?:ek|ki|ków|kom|kach)|zbiorów|zbiory|napoj[a-ząćęłńóśźż]*|cukier|cukru|mięs[ao]"),
         ],
     }
 
@@ -862,7 +983,7 @@ class DomainClassifier:
                 for cat, rules in DomainClassifier._RAW_RULES.items()
             }
 
-    def _score_text(self, text: str) -> Tuple[Dict[str, int], Dict[str, bool]]:
+    def _score_single_lang(self, text: str) -> Tuple[Dict[str, int], Dict[str, bool]]:
         scores: Dict[str, int] = {cat: 0 for cat in SPECIALIZED_CATEGORIES}
         has_tier3: Dict[str, bool] = {cat: False for cat in SPECIALIZED_CATEGORIES}
         if not text:
@@ -872,16 +993,35 @@ class DomainClassifier:
         for cat, rules in self._COMPILED_RULES.items():
             cat_score = 0
             for weight, regex in rules:
-                hits = len(regex.findall(text))
-                if hits:
+                distinct_hits = len({m.lower() for m in regex.findall(text)})
+                if distinct_hits:
                     if weight >= 3:
                         has_tier3[cat] = True
-                    cat_score += weight * min(hits, 2)
+                    cat_score += weight * min(distinct_hits, 2)
             scores[cat] = cat_score + stat_boosts.get(cat, 0)
+        return scores, has_tier3
 
-        # Cross-domain suppression: if strong tech/environment hit occurs and medical has no Tier-3 hit,
-        # suppress weak medical noise (e.g., generic words in engineering/environmental texts).
-        if (scores["tech"] >= 3 or scores["environment"] >= 3) and not has_tier3["medical"]:
+    def _score_pair(self, source_text: str, target_text: str, pivot_en_text: str = "") -> Tuple[Dict[str, int], Dict[str, bool]]:
+        """
+        Scores source, target, and optional pivot_en independently and takes the per-category
+        maximum, avoiding EN+PL double-counting of the exact same translated concept.
+        """
+        scores: Dict[str, int] = {cat: 0 for cat in SPECIALIZED_CATEGORIES}
+        has_tier3: Dict[str, bool] = {cat: False for cat in SPECIALIZED_CATEGORIES}
+
+        for txt in (source_text, target_text, pivot_en_text):
+            if not txt:
+                continue
+            s_map, t3_map = self._score_single_lang(txt)
+            for cat in SPECIALIZED_CATEGORIES:
+                if s_map[cat] > scores[cat]:
+                    scores[cat] = s_map[cat]
+                if t3_map[cat]:
+                    has_tier3[cat] = True
+
+        # Cross-domain suppression: if strong engineering/energy_env/chemicals hit occurs
+        # and medical has no Tier-3 hit, suppress weak medical noise.
+        if (scores["engineering"] >= 3 or scores["energy_env"] >= 3 or scores["chemicals"] >= 3) and not has_tier3["medical"]:
             if scores["medical"] < 4:
                 scores["medical"] = 0
 
@@ -923,18 +1063,12 @@ class DomainClassifier:
         Classifies a segment into one or more matching categories (multi-label).
         Falls back to ['general'] if no specialized domain meets the threshold.
         """
-        combined = f"{source_text} {target_text}"
-        if pivot_en_text:
-            combined = f"{combined} {pivot_en_text}"
-
-        raw_scores, _ = self._score_text(combined)
+        raw_scores, _ = self._score_pair(source_text, target_text, pivot_en_text)
         priors = self._update_and_get_prior(doc_key, raw_scores)
 
         matched: List[str] = []
         for cat in SPECIALIZED_CATEGORIES:
             raw = raw_scores[cat]
-            # Apply document context prior only if the segment itself has at least a weak signal (>= 2)
-            # or a clear domain token (>= 1), keeping pure boilerplate in 'general'.
             effective = raw + (priors[cat] if raw >= 2 else 0)
             if effective >= self.threshold:
                 matched.append(cat)
@@ -2346,20 +2480,24 @@ def run_batch_extraction(
 
 def _prompt_domain_options_wizard() -> Tuple[Optional[Set[str]], bool, str]:
     """Prompts for optional domain filtering/splitting in Step 5 of the wizard."""
+    cats_inline = ", ".join(DOMAIN_CATEGORIES)
     print()
-    print(UI.c(" Domain categorization (legal, business, environment, tech, medical, general):", UI.BOLD))
+    print(UI.c(f" Domain categorization (10 market-aligned categories):", UI.BOLD))
+    print(UI.c(f"   Categories: {cats_inline}", UI.DIM))
     print(UI.c("   [NOTE] Domain filtering is automated (machine-based) and is not 100% accurate.", UI.YELLOW))
     print(UI.c("          If a segment matches two or more categories, it is placed in all matching files.", UI.DIM))
     print(f" [{UI.c('1', UI.CYAN)}] No domain splitting – keep all segments together [Default]")
-    print(f" [{UI.c('2', UI.CYAN)}] Split output into separate files by domain (_legal, _business, _environment, _tech, _medical, _general)")
+    print(f" [{UI.c('2', UI.CYAN)}] Split output into separate files by domain (_legal, _finance, _trade, _it_telecom, _engineering, _energy_env, _medical, _chemicals, _agri_food, _general)")
     print(f" [{UI.c('3', UI.CYAN)}] Filter only selected domain categories")
 
     d_choice = UI.prompt("Select domain option", default="1").strip()
     if d_choice == "2":
-        return None, True, "Split into separate files by category (multi-label)"
+        return None, True, "Split into separate files by category (10 domains, multi-label)"
     elif d_choice == "3":
-        print(UI.c(" Available categories: legal, business, environment, tech, medical, general", UI.DIM))
-        raw_cats = UI.prompt("Enter categories separated by commas (e.g. legal, medical)", default="legal")
+        print(UI.c(" Available categories:", UI.BOLD))
+        for c_code in DOMAIN_CATEGORIES:
+            print(f"   * {UI.c(f'{c_code:<12}', UI.CYAN)} - {DOMAIN_LABELS.get(c_code, '')}")
+        raw_cats = UI.prompt("Enter categories separated by commas (e.g. legal, finance, medical)", default="legal")
         inc_cats = parse_categories_arg(raw_cats) or {"legal"}
         split_ans = UI.prompt_yes_no("Split selected categories into separate files (instead of one combined file)?", default=True)
         cats_str = ", ".join(sorted(inc_cats))
@@ -2734,13 +2872,16 @@ def main():
   2. Extract with 50,000 segment chunking (for Trados/memoQ RAM stability):
      python3 tmx_extractor.py -i Vol_2009_4.zip -s EN -t PL -o memory_en_pl.tmx --split 50000
 
-  3. Extract all ZIP archives in a folder one by one (batch mode):
-     python3 tmx_extractor.py -i ./downloaded_zips --batch -s EN -t PL --output-dir ./results
+  3. Split output into 10 specialized translation domains (multi-label):
+     python3 tmx_extractor.py -i Vol_2025.new_1.zip -s EN -t PL -o eu_mem.tmx --split-by-category
 
-  4. Download entire DGT-TM repository (all 87 volumes, 2004-2025, file by file):
-     python3 tmx_extractor.py --download-repo --dest-dir ./dgt_zips
+  4. Extract all ZIP archives in a folder one by one (batch mode):
+     python3 tmx_extractor.py -i ./TMX --batch -s EN -t PL --output-dir ./results
 
-  5. View MIT License:
+  5. Download entire DGT-TM repository (all 87 volumes, 2004-2025, file by file):
+     python3 tmx_extractor.py --download-repo --dest-dir ./TMX
+
+  6. View MIT License:
      python3 tmx_extractor.py --license
 """
     )
@@ -2752,8 +2893,16 @@ def main():
     parser.add_argument("--batch", action="store_true", help="Batch process all ZIP archives found in --input directory")
     parser.add_argument("--output-dir", default="", help="Output directory for batch processing")
     parser.add_argument("--split", type=int, default=0, help="Split output into files of N segments each (e.g. 50000) [0 = no split]")
-    parser.add_argument("--categories", default="", help="Filter domain categories (comma-separated: legal,business,environment,tech,medical,general)")
-    parser.add_argument("--split-by-category", action="store_true", help="Split output into separate files per domain category (_legal, _business, etc.)")
+    parser.add_argument(
+        "--categories",
+        default="",
+        help="Filter domain categories (comma-separated: legal,finance,trade,it_telecom,engineering,energy_env,medical,chemicals,agri_food,general)"
+    )
+    parser.add_argument(
+        "--split-by-category",
+        action="store_true",
+        help="Split output into separate files per domain category (_legal, _finance, _trade, _it_telecom, _engineering, _energy_env, _medical, _chemicals, _agri_food, _general)"
+    )
     parser.add_argument("--no-dedup", action="store_true", help="Disable duplicate removal (keep all repeated sentences)")
     parser.add_argument("--no-filter-identical", action="store_true", help="Keep segments identical in source and target")
     parser.add_argument("-m", "--max-count", type=int, default=0, help="Maximum number of translation pairs to extract [0 = unlimited]")
