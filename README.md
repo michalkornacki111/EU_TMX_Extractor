@@ -93,6 +93,44 @@ Regulatory sentences genuinely straddle domains (for example, *"Pursuant to Dire
 
 ---
 
+## 📊 Full DGT-TM Corpus Extraction Statistics (2026)
+
+As a real-world benchmark of the full official European Commission **DGT-TM** repository (**2004–2025**, all **87 ZIP archives**), a unified batch extraction was executed for **English (`EN`) ➔ Polish (`PL`)** on **27 November 2026** using **EU TMX Extractor v2.6** (`--split-by-category --split 200000`):
+
+### Corpus Overview
+
+| Metric | Result |
+| :--- | :--- |
+| **Source Corpus** | Official European Commission DGT-TM (2004–2025) |
+| **Language Pair** | English (`EN`) ➔ Polish (`PL`) |
+| **Archives Processed** | `87 / 87` ZIP volumes (`0` errors; `54,770` internal `.tmx` files scanned) |
+| **Total Translation Units Scanned** | `10,078,172` |
+| **Unique Segments Extracted** | **`5,044,373`** |
+| **Global Duplicates Removed** | `3,103,116` (`38.1%` reduction across all 87 volumes) |
+| **Identical Segments Filtered** | `8,832` |
+| **Output Files Generated** | `33` standalone TMX 1.4 files (max 200,000 segments/file; ~3.03 GB total) |
+| **Total Processing Time** | `1 h 25 min` (`5,098.02 s`) |
+
+### Segments by Domain Category
+
+| Category | Segments | Share of Unique Pairs | Output TMX Files |
+| :--- | ---: | ---: | ---: |
+| **`legal`** (Law, Judiciary & EU Legislation) | **1,671,437** | 33.1% | 9 |
+| **`trade`** (International Trade, Customs, Procurement & Business) | **578,540** | 11.5% | 3 |
+| **`finance`** (Banking, Accounting IFRS & Taxation) | **377,402** | 7.5% | 2 |
+| **`engineering`** (Automotive, Transport, Aviation, Rail & Machinery) | **194,570** | 3.9% | 1 |
+| **`agri_food`** (Agriculture, Food Safety EFSA & Fisheries) | **148,782** | 2.9% | 1 |
+| **`energy_env`** (Energy, Climate, EU ETS & Environment) | **145,697** | 2.9% | 1 |
+| **`it_telecom`** (IT, Software, Cybersecurity, AI & Telecom) | **73,307** | 1.5% | 1 |
+| **`chemicals`** (REACH/CLP, Safety Data Sheets & Biocides) | **62,709** | 1.2% | 1 |
+| **`medical`** (Pharmaceuticals, Clinical Trials, MDR/IVDR & Veterinary) | **56,457** | 1.1% | 1 |
+| **`general`** (Administrative, Annexes, Entity Lists & Fallback) | **2,462,903** | 48.8% | 13 |
+
+> [!NOTE]
+> Because domain classification uses **multi-label routing** (a segment matching two or more domains is placed into each relevant category), total category placements (`5,771,804`) exceed the `5,044,373` unique translation pairs, and percentages sum to more than 100%.
+
+---
+
 ## 🚀 Quick Start (For Non-Technical Users)
 
 1. **Install Python 3** (one-time setup; on Windows make sure to check **`Add python.exe to PATH`**).
@@ -170,14 +208,14 @@ EU_TMX_Extractor/
 ├── LICENSE                 # MIT License
 ├── run_e2e_tests.py        # Automated E2E test runner
 └── tests/
-    └── test_e2e.py         # End-to-end test suite (25 tests)
+    └── test_e2e.py         # End-to-end test suite (26 tests)
 ```
 
 ---
 
 ## 🧪 Running Tests
 
-The project uses only Python's standard library and includes an automated end-to-end test suite (25 tests) covering TMX 1.4 XML validation, RAM-protection chunking, unified multi-ZIP batch merging with global cross-volume deduplication, per-category subfolders, `--per-zip` legacy mode, Windows/macOS/Linux console compatibility, repository downloads, and 10-category domain classification:
+The project uses only Python's standard library and includes an automated end-to-end test suite (26 tests) covering TMX 1.4 XML validation, RAM-protection chunking, unified multi-ZIP batch merging with global cross-volume deduplication, per-category subfolders, `--per-zip` legacy mode, Windows/macOS/Linux console compatibility, live progress bar rendering, repository downloads, and 10-category domain classification:
 
 ```bash
 python3 run_e2e_tests.py
