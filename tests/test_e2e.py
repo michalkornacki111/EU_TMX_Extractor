@@ -568,41 +568,72 @@ class TestRepositoryBatchDownloadAndDiskSummaryE2E(unittest.TestCase):
 
 
 class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
-    """Tests multi-label domain classification, filtering, and splitting across 6 categories."""
+    """Tests multi-label domain classification, filtering, and splitting across the 10 market-aligned categories."""
 
     def setUp(self):
         self.test_dir = tempfile.mkdtemp(prefix="e2e_domain_test_")
         self.sample_pairs = [
+            # 0: legal
             (
                 "Regulation (EC) No 1234/2025 of the European Parliament pursuant to Article 4 on infringement proceedings.",
                 "Rozporządzenie (WE) nr 1234/2025 Parlamentu Europejskiego zgodnie z artykułem 4 w sprawie naruszenia.",
                 "Verordnung (EG) Nr. 1234/2025."
             ),
+            # 1: finance
             (
-                "The undertaking received State aid and a customs tariff exemption affecting market competition and VAT.",
-                "Przedsiębiorstwo otrzymało pomoc państwa i zwolnienie z cła wpływające na konkurencję na rynku i VAT.",
+                "Credit institutions must report non-current financial assets at fair value on the balance sheet and VAT taxation.",
+                "Instytucje kredytowe wykazują długoterminowe aktywa finansowe w wartości godziwej w bilansie oraz podatek VAT.",
+                "Kreditinstitute melden langfristige finanzielle Vermögenswerte."
+            ),
+            # 2: trade
+            (
+                "The undertaking received State aid, public procurement contracts, and anti-dumping customs tariff exemptions.",
+                "Przedsiębiorstwo otrzymało pomoc państwa, zamówienia publiczne oraz zwolnienie z cła antydumpingowego.",
                 "Das Unternehmen erhielt eine staatliche Beihilfe."
             ),
+            # 3: it_telecom
             (
-                "Reducing greenhouse gas CO2 emissions and preventing biodiversity loss and hazardous waste pollution.",
-                "Redukcja emisji dwutlenku węgla oraz ochrona bioróżnorodności i zapobieganie zanieczyszczeniu odpadami niebezpiecznymi.",
+                "Cybersecurity software encryption, artificial intelligence algorithms, broadband radio spectrum, and personal data protection.",
+                "Oprogramowanie szyfrujące w cyberbezpieczeństwie, algorytmy sztucznej inteligencji, widmo radiowe i ochrona danych osobowych.",
+                "Cybersicherheitssoftware und Datenschutz."
+            ),
+            # 4: engineering
+            (
+                "Type-approval of compression-ignition diesel engines, aircraft airworthiness, and railway ERTMS rolling stock.",
+                "Homologacja typu silników o zapłonie samoczynnym, zdatność do lotu statków powietrznych oraz tabor kolejowy ERTMS.",
+                "Typgenehmigung von Selbstzündungsmotoren."
+            ),
+            # 5: energy_env
+            (
+                "Reducing greenhouse gas CO2 emissions under EU ETS, renewable energy wind turbines, and preventing biodiversity loss.",
+                "Redukcja emisji gazów cieplarnianych CO2 w systemie EU ETS, odnawialne źródła energii oraz ochrona bioróżnorodności.",
                 "Verringerung der Treibhausgasemissionen."
             ),
+            # 6: medical
             (
-                "Approval of compression-ignition engines, adaptive front-lighting systems, and cybersecurity software encryption.",
-                "Homologacja silników o zapłonie samoczynnym, reflektorów oraz oprogramowania do szyfrowania w cyberbezpieczeństwie.",
-                "Genehmigung von Selbstzündungsmotoren."
-            ),
-            (
-                "Clinical trial pharmacovigilance for medicinal products, vaccines, and veterinary antimicrobial toxicology.",
-                "Badania kliniczne i nadzór nad bezpieczeństwem farmakoterapii produktów leczniczych, szczepionek i weterynarii.",
+                "Clinical trial pharmacovigilance for medicinal products, vaccines, in vitro diagnostic medical devices, and veterinary health.",
+                "Badania kliniczne i nadzór nad bezpieczeństwem farmakoterapii produktów leczniczych, szczepionek i wyrobów medycznych.",
                 "Klinische Prüfung von Arzneimitteln."
             ),
+            # 7: chemicals
+            (
+                "Safety data sheet under REACH Regulation for biocidal products, active substances, CAS number, and acute toxicity.",
+                "Karta charakterystyki zgodnie z rozporządzeniem REACH dla produktów biobójczych, substancji czynnych i toksyczności ostrej.",
+                "Sicherheitsdatenblatt gemäß REACH-Verordnung."
+            ),
+            # 8: agri_food
+            (
+                "Common Agricultural Policy, EFSA maximum residue levels in foodstuffs, organic farming, animal feed, and fisheries quotas.",
+                "Wspólna polityka rolna, najwyższe dopuszczalne poziomy pozostałości w środkach spożywczych, pasze i kwoty połowowe.",
+                "Gemeinsame Agrarpolitik und Lebensmittelsicherheit."
+            ),
+            # 9: general
             (
                 "12 May 2025, Brussels.",
                 "12 maja 2025 r., Bruksela.",
                 "12. Mai 2025, Brüssel."
             ),
+            # 10: multi-label (legal + engineering + energy_env)
             (
                 "Pursuant to Directive 2024/10, engine exhaust emission limits must prevent air pollution.",
                 "Zgodnie z dyrektywą 2024/10 normy emisji spalin silników muszą zapobiegać zanieczyszczeniu powietrza.",
@@ -613,23 +644,32 @@ class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
+    def test_category_aliases_and_constants(self):
+        self.assertEqual(len(tmx_extractor.DOMAIN_CATEGORIES), 10)
+        self.assertEqual(len(tmx_extractor.SPECIALIZED_CATEGORIES), 9)
+        parsed = tmx_extractor.parse_categories_arg("business, tech, environment, chem, food, it, pharma")
+        self.assertEqual(
+            parsed,
+            {"trade", "engineering", "energy_env", "chemicals", "agri_food", "it_telecom", "medical"}
+        )
+
     def test_classifier_multilabel_and_doc_context(self):
         clf = tmx_extractor.DomainClassifier(use_doc_context=True)
-        # Multi-label sentence: legal + tech + environment
+        # Multi-label sentence: legal + engineering + energy_env
         cats = clf.classify_multi(
-            self.sample_pairs[6][0],
-            self.sample_pairs[6][1],
+            self.sample_pairs[10][0],
+            self.sample_pairs[10][1],
             doc_key="DOC_MULTI"
         )
         self.assertIn("legal", cats)
-        self.assertIn("environment", cats)
-        self.assertIn("tech", cats)
+        self.assertIn("energy_env", cats)
+        self.assertIn("engineering", cats)
         self.assertNotIn("general", cats)
 
         # Boilerplate date/city falls back to general even in a typed document
         gen_cats = clf.classify_multi(
-            self.sample_pairs[5][0],
-            self.sample_pairs[5][1],
+            self.sample_pairs[9][0],
+            self.sample_pairs[9][1],
             doc_key="DOC_MULTI"
         )
         self.assertEqual(gen_cats, ["general"])
@@ -641,7 +681,7 @@ class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
             "Silniki Diesla wyposażone w zaawansowane układy oczyszczania spalin, w tym katalizatory de NOx lub filtry cząstek stałych dodatkowo poddaje się badaniu ETC.",
             doc_key="42006X1227(05)R(01)"
         )
-        self.assertIn("tech", c1)
+        self.assertIn("engineering", c1)
         self.assertNotIn("medical", c1)
 
         c2 = clf.classify_multi(
@@ -649,7 +689,7 @@ class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
             "Dla silników gazowych i silników z oczyszczaniem spalin",
             doc_key="42006X1227(05)R(01)"
         )
-        self.assertIn("tech", c2)
+        self.assertIn("engineering", c2)
         self.assertNotIn("medical", c2)
 
         c3 = clf.classify_multi(
@@ -665,6 +705,66 @@ class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
         boosts = stat.score_boosts("clinical trial medicinal product pharmacovigilance dosage patients")
         self.assertGreaterEqual(boosts["medical"], 1)
 
+    def test_bilingual_no_self_doubling_and_lexical_traps(self):
+        clf = tmx_extractor.DomainClassifier(use_doc_context=False)
+        # Mineral/aerated waters -> agri_food, NOT energy_env
+        c_wat = clf.classify_multi(
+            "Waters, including mineral waters and aerated waters, containing added sugar",
+            "Wody, włącznie z wodami mineralnymi i wodami gazowanymi"
+        )
+        self.assertIn("agri_food", c_wat)
+        self.assertNotIn("energy_env", c_wat)
+
+        # Banking ratio calibration must not self-double EN+PL ('calibration'+'kalibracja') into engineering
+        c_bank = clf.classify_multi(
+            "Because the NSFR complements the LCR, those two ratios should be consistent in their definition and calibration.",
+            "Ponieważ wskaźnik stabilnego finansowania netto uzupełnia wskaźnik pokrycia wypływów netto, definicja i kalibracja tych dwóch wskaźników powinny być spójne."
+        )
+        self.assertNotIn("engineering", c_bank)
+
+        # Aircraft diagnostic systems -> engineering, NOT medical
+        c_air = clf.classify_multi(
+            "Development and manufacture of aircraft ground control and diagnostic systems",
+            "Projektowanie i produkcja naziemnych systemów kontroli i diagnostyki statków powietrznych"
+        )
+        self.assertIn("engineering", c_air)
+        self.assertNotIn("medical", c_air)
+
+        # Natural and legal persons -> legal, NOT energy_env
+        c_nat = clf.classify_multi(
+            "Proportion spread over natural and legal persons",
+            "Odsetek rozłożony na osoby fizyczne i prawne"
+        )
+        self.assertIn("legal", c_nat)
+        self.assertNotIn("energy_env", c_nat)
+
+        # IFRS financial assets -> finance
+        self.assertIn(
+            "finance",
+            clf.classify_multi(
+                "The amount of non-current financial assets available-for-sale.",
+                "Kwota długoterminowych aktywów finansowych dostępnych do sprzedaży."
+            )
+        )
+
+        # Cybersecurity / personal data -> it_telecom
+        self.assertIn(
+            "it_telecom",
+            clf.classify_multi(
+                "Encryption of personal data in cloud computing information systems.",
+                "Szyfrowanie danych osobowych w systemach informatycznych chmury obliczeniowej."
+            )
+        )
+
+        # SDS / REACH -> chemicals
+        self.assertIn(
+            "chemicals",
+            clf.classify_multi(
+                "Hazard statements and safety data sheet for biocidal active substances.",
+                "Zwroty wskazujące rodzaj zagrożenia i karta charakterystyki substancji czynnych."
+            )
+        )
+
     def test_split_by_category_creates_valid_tmx_files(self):
         zip_path = os.path.join(self.test_dir, "domains.zip")
         create_mock_zip(zip_path, pairs=self.sample_pairs)
@@ -679,8 +779,8 @@ class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
             quiet=True
         )
 
-        self.assertEqual(stats["extracted_pairs"], 7)
-        for cat in ("legal", "business", "environment", "tech", "medical", "general"):
+        self.assertEqual(stats["extracted_pairs"], 11)
+        for cat in tmx_extractor.DOMAIN_CATEGORIES:
             cat_file = os.path.join(self.test_dir, f"eu_mem_{cat}.tmx")
             self.assertTrue(os.path.isfile(cat_file), f"Missing split file for category: {cat}")
             tree = ET.parse(cat_file)
@@ -688,13 +788,11 @@ class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
             tus = tree.getroot().find("body").findall("tu")
             self.assertGreaterEqual(len(tus), 1)
 
-        # Verify multi-label pair #7 appears in both legal and environment
-        legal_tree = ET.parse(os.path.join(self.test_dir, "eu_mem_legal.tmx"))
-        env_tree = ET.parse(os.path.join(self.test_dir, "eu_mem_environment.tmx"))
-        legal_texts = ["".join(s.itertext()) for s in legal_tree.getroot().iter("seg")]
-        env_texts = ["".join(s.itertext()) for s in env_tree.getroot().iter("seg")]
-        self.assertTrue(any("Directive 2024/10" in t for t in legal_texts))
-        self.assertTrue(any("Directive 2024/10" in t for t in env_texts))
+        # Verify multi-label pair #11 appears in legal, engineering, and energy_env
+        for multi_cat in ("legal", "engineering", "energy_env"):
+            cat_tree = ET.parse(os.path.join(self.test_dir, f"eu_mem_{multi_cat}.tmx"))
+            seg_texts = ["".join(s.itertext()) for s in cat_tree.getroot().iter("seg")]
+            self.assertTrue(any("Directive 2024/10" in t for t in seg_texts), f"Missing multi-label segment in {multi_cat}")
 
         # Check report includes domain breakdown
         with open(stats["report_path"], "r", encoding="utf-8") as rf:
@@ -735,15 +833,72 @@ class TestDomainClassificationAndSplittingE2E(unittest.TestCase):
             "-s", "EN",
             "-t", "PL",
             "-o", out_tmx,
-            "--categories", "legal,business",
+            "--categories", "legal,finance,trade",
             "--split-by-category",
             "-q"
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertTrue(os.path.isfile(os.path.join(self.test_dir, "cli_out_legal.tmx")))
-        self.assertTrue(os.path.isfile(os.path.join(self.test_dir, "cli_out_business.tmx")))
+        self.assertTrue(os.path.isfile(os.path.join(self.test_dir, "cli_out_finance.tmx")))
+        self.assertTrue(os.path.isfile(os.path.join(self.test_dir, "cli_out_trade.tmx")))
         self.assertFalse(os.path.isfile(os.path.join(self.test_dir, "cli_out_medical.tmx")))
+
+    def test_non_en_pl_pair_pivot_vs_standalone_bilingual_warning(self):
+        # 1. Multilingual DGT-TM input (FR + DE + EN): FR -> DE succeeds via EN pivot without warning
+        multilingual_tmx = os.path.join(self.test_dir, "dgt_multi_fr_de_en.tmx")
+        with open(multilingual_tmx, "w", encoding="utf-8") as f:
+            f.write("""<?xml version="1.0" encoding="UTF-8"?>
+<tmx version="1.4">
+  <header creationtool="DGT-TM" creationtoolversion="1.0" datatype="PlainText" segtype="sentence" adminlang="EN" srclang="EN" o-tmf="unknown"/>
+  <body>
+    <tu tuid="1">
+      <prop type="Txt::Doc. No.">32025R0001</prop>
+      <tuv xml:lang="EN-GB"><seg>Clinical trial pharmacovigilance for medicinal products and vaccines.</seg></tuv>
+      <tuv xml:lang="FR-FR"><seg>Essai clinique et pharmacovigilance des médicaments et vaccins.</seg></tuv>
+      <tuv xml:lang="DE-DE"><seg>Klinische Prüfung und Pharmakovigilanz für Arzneimittel und Impfstoffe.</seg></tuv>
+    </tu>
+  </body>
+</tmx>""")
+        out_multi = os.path.join(self.test_dir, "out_multi_fr_de.tmx")
+        stats_multi = tmx_extractor.run_extraction(
+            input_path=multilingual_tmx,
+            source_lang="FR",
+            target_lang="DE",
+            output_path=out_multi,
+            split_by_category=True,
+            quiet=True
+        )
+        self.assertEqual(stats_multi["pivot_en_found"], 1)
+        self.assertEqual(stats_multi["domain_lang_warning"], "")
+        self.assertTrue(os.path.isfile(os.path.join(self.test_dir, "out_multi_fr_de_medical.tmx")))
+
+        # 2. Standalone bilingual TMX (ONLY FR + DE, no EN or PL): emits clear domain_lang_warning
+        bilingual_only_tmx = os.path.join(self.test_dir, "bilingual_only_fr_de.tmx")
+        with open(bilingual_only_tmx, "w", encoding="utf-8") as f:
+            f.write("""<?xml version="1.0" encoding="UTF-8"?>
+<tmx version="1.4">
+  <header creationtool="Custom" creationtoolversion="1.0" datatype="PlainText" segtype="sentence" adminlang="EN" srclang="FR" o-tmf="unknown"/>
+  <body>
+    <tu tuid="1">
+      <tuv xml:lang="FR-FR"><seg>Essai clinique des médicaments.</seg></tuv>
+      <tuv xml:lang="DE-DE"><seg>Klinische Prüfung von Arzneimitteln.</seg></tuv>
+    </tu>
+  </body>
+</tmx>""")
+        out_bi = os.path.join(self.test_dir, "out_bi_fr_de.tmx")
+        stats_bi = tmx_extractor.run_extraction(
+            input_path=bilingual_only_tmx,
+            source_lang="FR",
+            target_lang="DE",
+            output_path=out_bi,
+            split_by_category=True,
+            quiet=True
+        )
+        self.assertEqual(stats_bi["pivot_en_found"], 0)
+        self.assertIn("No English (EN) pivot segments were found", stats_bi["domain_lang_warning"])
+        with open(stats_bi["report_path"], "r", encoding="utf-8") as rf:
+            self.assertIn("Domain Language Limitation:", rf.read())
 
 
 if __name__ == "__main__":
