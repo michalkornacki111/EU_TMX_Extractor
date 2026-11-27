@@ -1756,12 +1756,32 @@ def download_dgt_repository_batch(
     return ("batch", all_valid_zips)
 
 
-def select_and_download_dgt_volume(dest_folder: str) -> Optional[Union[str, Tuple[str, Any]]]:
+def get_default_tmx_dir() -> str:
+    """
+    Returns the default TMX storage/download folder:
+    - If running inside '--- APP ---' (or sibling '../TMX' exists), returns '<parent>/TMX'.
+    - Otherwise returns '<script_dir>/TMX' (if writable) or '<cwd>/TMX'.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(script_dir)
+    if os.path.basename(script_dir) == "--- APP ---" or os.path.isdir(os.path.join(parent_dir, "TMX")):
+        return os.path.join(parent_dir, "TMX")
+    base = script_dir if os.access(script_dir, os.W_OK) else os.getcwd()
+    return os.path.join(base, "TMX")
+
+
+def select_and_download_dgt_volume(dest_folder: Optional[str] = None) -> Optional[Union[str, Tuple[str, Any]]]:
     """Interactive menu for downloading official DGT-TM packages from data.europa.eu."""
+    if not dest_folder:
+        dest_folder = get_default_tmx_dir()
+
     UI.section("DOWNLOAD OFFICIAL EU DGT-TM PACKAGES (data.europa.eu)")
     print(UI.c(" Official dataset: https://data.europa.eu/data/datasets/dgt-translation-memory?locale=en", UI.CYAN))
-    print(UI.c(" Files will be downloaded directly into the program folder:", UI.BOLD))
-    print(UI.c(f" 📂 {dest_folder}", UI.YELLOW))
+    chosen_dest = UI.prompt("Destination folder for downloaded DGT-TM ZIP files", default=dest_folder)
+    if chosen_dest.strip():
+        dest_folder = os.path.abspath(os.path.expanduser(chosen_dest.strip()))
+    os.makedirs(dest_folder, exist_ok=True)
+    print(UI.c(f" Active download folder: {dest_folder}", UI.YELLOW))
     print()
 
     cat = fetch_live_catalog_if_possible()
@@ -1872,9 +1892,10 @@ def find_local_data_sources() -> List[Tuple[str, str]]:
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     cwd = os.getcwd()
+    default_tmx_dir = get_default_tmx_dir()
 
     dirs_to_scan = []
-    for d in [script_dir, cwd]:
+    for d in [default_tmx_dir, os.path.join(script_dir, "TMX"), os.path.join(cwd, "TMX"), script_dir, cwd]:
         if d and d not in dirs_to_scan and os.path.exists(d):
             dirs_to_scan.append(d)
 
@@ -2375,8 +2396,8 @@ def run_interactive_wizard():
     if local_candidates:
         print(UI.c(" Detected data files in your folder and surroundings:", UI.GREEN))
     else:
-        print(UI.c(" [TIP] Save downloaded .zip files directly into the program folder:", UI.YELLOW))
-        print(UI.c(f"    FOLDER: {script_dir}", UI.BOLD))
+        print(UI.c(" [TIP] Save downloaded .zip files directly into the TMX folder:", UI.YELLOW))
+        print(UI.c(f"    FOLDER: {get_default_tmx_dir()}", UI.BOLD))
 
     while True:
         menu_idx = 1
@@ -2416,7 +2437,7 @@ def run_interactive_wizard():
     if selected_type == "local":
         input_path = selected_val
     elif selected_type == "download":
-        dest_folder = script_dir if os.access(script_dir, os.W_OK) else os.getcwd()
+        dest_folder = get_default_tmx_dir()
         dl_res = select_and_download_dgt_volume(dest_folder)
         if not dl_res:
             UI.info("Download cancelled or returning to menu.")
@@ -2739,7 +2760,7 @@ def main():
     parser.add_argument("-q", "--quiet", action="store_true", help="Quiet mode (suppress progress bar and banner)")
     parser.add_argument("--download-volume", help="Download a specific volume URL or filename")
     parser.add_argument("--download-repo", action="store_true", help="Download entire official DGT-TM repository (2004-2025) file by file")
-    parser.add_argument("--dest-dir", default=".", help="Destination directory for downloads [default: current folder]")
+    parser.add_argument("--dest-dir", default=get_default_tmx_dir(), help="Destination directory for downloads [default: TMX folder]")
     parser.add_argument("--license", action="store_true", help="Display full MIT license and author information")
 
     args = parser.parse_args()
